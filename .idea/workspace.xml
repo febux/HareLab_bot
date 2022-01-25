@@ -1,33 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="e681271f-3981-4041-bfb5-42976b650e56" name="Changes" comment="HareLab_bot - branch">
-      <change afterPath="$PROJECT_DIR$/.idea/HareLab_bot.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bot/admin_panel.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bot/author_panel.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bot/bot.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bot/config.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bot/data/bd/bot_message_bd.bd.bak" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bot/data/bd/bot_message_bd.bd.dat" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bot/data/bd/bot_message_bd.bd.dir" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bot/data/bd/sost.bd.bak" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bot/data/bd/sost.bd.dat" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bot/data/bd/sost.bd.dir" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bot/data/db/main_data.db" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bot/data/example.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bot/data/working_log.log" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bot/defs.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bot/extensions.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bot/files.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bot/mod_panel.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bot/settings_local.yaml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
+    <list default="true" id="e681271f-3981-4041-bfb5-42976b650e56" name="Changes" comment="HareLab_bot - new rep">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bot/data/bd/sost.bd.dat" beforeDir="false" afterPath="$PROJECT_DIR$/bot/data/bd/sost.bd.dat" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bot/data/db/main_data.db" beforeDir="false" afterPath="$PROJECT_DIR$/bot/data/db/main_data.db" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bot/data/working_log.log" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -106,7 +84,14 @@
       <option name="project" value="LOCAL" />
       <updated>1643104976618</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="HareLab_bot - new rep">
+      <created>1643144787502</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1643144787502</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -135,6 +120,7 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="HareLab_bot - validation of urls and changing Git dir" />
     <MESSAGE value="HareLab_bot - fixed states bug" />
-    <option name="LAST_COMMIT_MESSAGE" value="HareLab_bot - fixed states bug" />
+    <MESSAGE value="HareLab_bot - new rep" />
+    <option name="LAST_COMMIT_MESSAGE" value="HareLab_bot - new rep" />
   </component>
 </project>
