@@ -1,0 +1,6 @@
+aiogram==2.13
+aioschedule~=0.5.2
+PyYAML~=6.0
+pendulum~=2.1.2
+requests~=2.25.1
+validators~=0.18.2
