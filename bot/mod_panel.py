@@ -7,7 +7,8 @@ from aiogram.utils.json import json
 
 import files
 from defs import get_moder_list, get_state, log, delete_state, set_state, get_admin_list, get_author_list, preview, \
-    edit_post, new_author, del_id, get_chat_value_message, delete_chat_value_message, set_chat_value_message
+    edit_post, new_author, del_id, get_chat_value_message, delete_chat_value_message, set_chat_value_message, \
+    get_blocked_user_list
 
 from aiogram.types import ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton, MessageEntity
 
@@ -128,7 +129,7 @@ async def in_moder_panel(bot, settings, message):
                                 entity_list.append(entity)
                             elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
                                                     "email", "phone_number", "bold", "italic", "underline",
-                                                    "strikethrough", "code"]:
+                                                    "strikethrough", "code", "pre"]:
                                 entity = MessageEntity(type=entity_values_list[0],
                                                        offset=count_string_track + entity_values_list[1],
                                                        length=entity_values_list[2])
@@ -538,7 +539,7 @@ async def in_moder_panel(bot, settings, message):
         elif message.text == 'Списки':
             await bot.delete_message(message.chat.id, message.message_id)
             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-            user_markup.row('Список авторов')
+            user_markup.row('Список авторов', 'Удалённые авторы')
             user_markup.row('Список модераторов', 'Список админов')
             user_markup.row(main_menu)
 
@@ -582,6 +583,20 @@ async def in_moder_panel(bot, settings, message):
                 await bot.send_message(message.chat.id, 'Выбери автора, которого нужно удалить',
                                        reply_markup=user_markup)
                 set_state(message.chat.id, 32)
+
+        elif message.text == 'Удалённые авторы':
+            await bot.delete_message(message.chat.id, message.message_id)
+            user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
+            user_markup.row(main_menu)
+
+            authors = "Удалённые авторы:\n\n"
+            if len(get_blocked_user_list()) != 0:
+                for author in get_blocked_user_list():
+                    authors += f"{author[0]} - @{author[1]} - @{author[2]}\n"
+
+                await bot.send_message(message.chat.id, authors, reply_markup=user_markup, parse_mode="HTML")
+            else:
+                await bot.send_message(message.chat.id, "Удалённых авторов еще нет", reply_markup=user_markup)
 
         elif message.text == 'Список админов':
             await bot.delete_message(message.chat.id, message.message_id)
@@ -905,7 +920,7 @@ async def in_moder_panel(bot, settings, message):
                                 entity_list.append(entity)
                             elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
                                                     "email", "phone_number", "bold", "italic", "underline",
-                                                    "strikethrough", "code"]:
+                                                    "strikethrough", "code", "pre"]:
                                 entity = MessageEntity(type=entity_values_list[0],
                                                        offset=count_string_track + entity_values_list[1],
                                                        length=entity_values_list[2])
@@ -928,7 +943,7 @@ async def in_moder_panel(bot, settings, message):
                                 entity_list.append(entity)
                             elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
                                                     "email", "phone_number", "bold", "italic", "underline",
-                                                    "strikethrough", "code"]:
+                                                    "strikethrough", "code", "pre"]:
                                 entity = MessageEntity(type=entity_values_list[0],
                                                        offset=count_string_track + entity_values_list[1],
                                                        length=entity_values_list[2])

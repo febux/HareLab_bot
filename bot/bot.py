@@ -9,7 +9,8 @@ from aiogram.types import ReplyKeyboardRemove
 # подключение функций из сторонних файлов
 from admin_panel import in_admin_panel, first_launch, admin_panel, admin_inline
 from author_panel import author_inline, in_author_panel, author_panel
-from defs import get_admin_list, get_moder_list, log, get_csv, get_state, set_state, get_author_list
+from defs import get_admin_list, get_moder_list, log, get_csv, get_state, set_state, get_author_list, \
+    get_blocked_user_list
 from mod_panel import in_moder_panel, moder_panel, moder_inline
 from extensions import Settings
 from config import admin_id
@@ -36,7 +37,7 @@ async def process_start_command(message: types.Message):
             await bot.send_message(message.chat.id, f"Привет, Админ {message.chat.username}!\n",
                                    reply_markup=ReplyKeyboardRemove())
 
-            await bot.send_message(message.chat.id, "Я HareLab-бот!\n "
+            await bot.send_message(message.chat.id, "Я HareGems-бот!\n"
                                                     "При помощи меня можно создать пост для канала "
                                                     "HareCrypta - Лаборатория Идей!\n"
                                                     "По команде /help можно получить "
@@ -45,7 +46,7 @@ async def process_start_command(message: types.Message):
             await log(f'Admin {message.chat.id} started bot')
         elif message.chat.id in [message.chat.id for item in get_moder_list() if message.chat.id in item]:
             await bot.send_message(message.chat.id, f"Привет, Модератор {message.chat.username}!")
-            await bot.send_message(message.chat.id, "Я HareLab-бот!\n "
+            await bot.send_message(message.chat.id, "Я HareGems-бот!\n"
                                                     "При помощи меня можно создать пост для канала "
                                                     "HareCrypta - Лаборатория Идей!\n"
                                                     "По команде /help можно получить "
@@ -54,13 +55,16 @@ async def process_start_command(message: types.Message):
             await log(f'Moder {message.chat.id} started bot')
         elif message.chat.id in [message.chat.id for item in get_author_list() if message.chat.id in item]:
             await bot.send_message(message.chat.id, f"Привет, Автор {message.chat.username}!")
-            await bot.send_message(message.chat.id, "Я HareLab-бот!\n "
+            await bot.send_message(message.chat.id, "Я HareGems-бот!\n"
                                                     "При помощи меня можно создать пост для канала "
                                                     "HareCrypta - Лаборатория Идей!\n"
                                                     "По команде /help можно получить "
                                                     "дополнительную информацию")
             await author_panel(bot, message)
             await log(f'Author {message.chat.id} started bot')
+        elif message.chat.id in [message.chat.id for item in get_blocked_user_list() if message.chat.id in item]:
+            await bot.send_message(message.chat.id, "Вы были заблокированы администратором бота!")
+            await log(f'Blocked Author {message.chat.id} tried to start bot')
     else:
         pass
 
@@ -86,6 +90,8 @@ async def text_handler(message: types.Message):
             await in_moder_panel(bot, settings, message)
         elif message.chat.id in [message.chat.id for item in get_author_list() if message.chat.id in item]:
             await in_author_panel(bot, settings, message)
+        elif message.chat.id in [message.chat.id for item in get_blocked_user_list() if message.chat.id in item]:
+            await bot.send_message(message.chat.id, "Вы были заблокированы администратором бота!")
     else:
         pass
 
@@ -104,6 +110,8 @@ async def document_handler(message: types.Message):
         elif message.chat.id in [message.chat.id for item in get_author_list() if message.chat.id in item]:
             if get_state(message.chat.id) in [8, 21, 210]:
                 await in_author_panel(bot, settings, message)
+        elif message.chat.id in [message.chat.id for item in get_blocked_user_list() if message.chat.id in item]:
+            await bot.send_message(message.chat.id, "Вы были заблокированы администратором бота!")
     else:
         pass
 

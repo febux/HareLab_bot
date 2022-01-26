@@ -122,7 +122,7 @@ async def in_author_panel(bot, settings, message):
                                 entity_list.append(entity)
                             elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
                                                     "email", "phone_number", "bold", "italic", "underline",
-                                                    "strikethrough", "code"]:
+                                                    "strikethrough", "code", "pre"]:
                                 entity = MessageEntity(type=entity_values_list[0],
                                                        offset=count_string_track + entity_values_list[1],
                                                        length=entity_values_list[2])
@@ -867,7 +867,7 @@ async def in_author_panel(bot, settings, message):
                                 entity_list.append(entity)
                             elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
                                                     "email", "phone_number", "bold", "italic", "underline",
-                                                    "strikethrough", "code"]:
+                                                    "strikethrough", "code", "pre"]:
                                 entity = MessageEntity(type=entity_values_list[0],
                                                        offset=count_string_track + entity_values_list[1],
                                                        length=entity_values_list[2])
@@ -890,7 +890,7 @@ async def in_author_panel(bot, settings, message):
                                 entity_list.append(entity)
                             elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
                                                     "email", "phone_number", "bold", "italic", "underline",
-                                                    "strikethrough", "code"]:
+                                                    "strikethrough", "code", "pre"]:
                                 entity = MessageEntity(type=entity_values_list[0],
                                                        offset=count_string_track + entity_values_list[1],
                                                        length=entity_values_list[2])

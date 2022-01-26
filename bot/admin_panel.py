@@ -12,7 +12,7 @@ import files
 from config import admin_id
 from defs import get_admin_list, log, new_admin, get_state, del_id, get_moder_list, new_moder, \
     get_author_list, new_author, get_csv, delete_state, set_state, preview, edit_post, change_settings, \
-    set_chat_value_message, delete_chat_value_message, get_chat_value_message
+    set_chat_value_message, delete_chat_value_message, get_chat_value_message, get_blocked_user_list, new_blocked_user
 
 # set logging level
 logging.basicConfig(filename=files.system_log, format='%(levelname)s:%(name)s:%(asctime)s:%(message)s',
@@ -179,7 +179,7 @@ async def in_admin_panel(bot, settings, message):
                                 entity_list.append(entity)
                             elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
                                                     "email", "phone_number", "bold", "italic", "underline",
-                                                    "strikethrough", "code"]:
+                                                    "strikethrough", "code", "pre"]:
                                 entity = MessageEntity(type=entity_values_list[0],
                                                        offset=count_string_track + entity_values_list[1],
                                                        length=entity_values_list[2])
@@ -268,7 +268,7 @@ async def in_admin_panel(bot, settings, message):
                     example_entities.append(entity)
                 elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
                                         "email", "phone_number", "bold", "italic", "underline",
-                                        "strikethrough", "code"]:
+                                        "strikethrough", "code", "pre"]:
                     entity = MessageEntity(type=entity["type"],
                                            offset=entity["offset"],
                                            length=entity["length"])
@@ -595,7 +595,7 @@ async def in_admin_panel(bot, settings, message):
         elif message.text == 'Списки':
             await bot.delete_message(message.chat.id, message.message_id)
             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-            user_markup.row('Список авторов')
+            user_markup.row('Список авторов', 'Удалённые авторы')
             user_markup.row('Список модераторов', 'Список админов')
             user_markup.row(main_menu)
 
@@ -639,6 +639,20 @@ async def in_admin_panel(bot, settings, message):
                 await bot.send_message(message.chat.id, 'Выбери автора, которого нужно удалить',
                                        reply_markup=user_markup)
                 set_state(message.chat.id, 32)
+
+        elif message.text == 'Удалённые авторы':
+            await bot.delete_message(message.chat.id, message.message_id)
+            user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
+            user_markup.row(main_menu)
+
+            authors = "Удалённые авторы:\n\n"
+            if len(get_blocked_user_list()) != 0:
+                for author in get_blocked_user_list():
+                    authors += f"{author[0]} - {author[1]} - @{author[2]}\n"
+
+                await bot.send_message(message.chat.id, authors, reply_markup=user_markup, parse_mode="HTML")
+            else:
+                await bot.send_message(message.chat.id, "Удалённых авторов еще нет", reply_markup=user_markup)
 
         elif message.text == 'Список админов':
             await bot.delete_message(message.chat.id, message.message_id)
@@ -762,7 +776,7 @@ async def in_admin_panel(bot, settings, message):
                         help_entities.append(entity)
                     elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
                                             "email", "phone_number", "bold", "italic", "underline",
-                                            "strikethrough", "code"]:
+                                            "strikethrough", "code", "pre"]:
                         entity = MessageEntity(type=entity_values_list[0],
                                                offset=entity_values_list[1],
                                                length=entity_values_list[2])
@@ -795,7 +809,7 @@ async def in_admin_panel(bot, settings, message):
                         footer_entities.append(entity)
                     elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
                                             "email", "phone_number", "bold", "italic", "underline",
-                                            "strikethrough", "code"]:
+                                            "strikethrough", "code", "pre"]:
                         entity = MessageEntity(type=entity_values_list[0],
                                                offset=entity_values_list[1],
                                                length=entity_values_list[2])
@@ -2458,6 +2472,7 @@ async def in_admin_panel(bot, settings, message):
             if int(author[0]) in [int(author[0]) for item in get_author_list() if int(author[0]) in item]:
                 try:
                     del_id('authors', int(author[0]))
+                    new_blocked_user(int(author[0]), author[1], message.chat.username)
                 except:
                     await log('Author was not deleted')
                 else:
@@ -2889,7 +2904,7 @@ async def admin_inline(bot, callback_query, settings):
                         entity_list.append(entity)
                     elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
                                             "email", "phone_number", "bold", "italic", "underline",
-                                            "strikethrough", "code"]:
+                                            "strikethrough", "code", "pre"]:
                         entity = MessageEntity(type=entity_values_list[0],
                                                offset=count_string_track + entity_values_list[1],
                                                length=entity_values_list[2])
@@ -2912,7 +2927,7 @@ async def admin_inline(bot, callback_query, settings):
                         entity_list.append(entity)
                     elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
                                             "email", "phone_number", "bold", "italic", "underline",
-                                            "strikethrough", "code"]:
+                                            "strikethrough", "code", "pre"]:
                         entity = MessageEntity(type=entity_values_list[0],
                                                offset=count_string_track + entity_values_list[1],
                                                length=entity_values_list[2])

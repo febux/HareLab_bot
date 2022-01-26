@@ -26,6 +26,48 @@ async def log(text):
             f.write(time + '    | ' + text + '\n')
 
 
+def del_id(table, id_for_del):
+    con = sqlite3.connect(files.main_db)
+    cursor = con.cursor()
+
+    cursor.execute(f"DELETE FROM {str(table)} WHERE id = {str(id_for_del)};")
+    con.commit()
+    con.close()
+
+
+def new_blocked_user(his_id, his_username, who_blocked_username):
+    con = sqlite3.connect(files.main_db)
+    cursor = con.cursor()
+
+    cursor.execute("CREATE TABLE IF NOT EXISTS blocked_users (id INT, username TEXT, who_blocked TEXT);")
+    cursor.execute(f"INSERT OR IGNORE INTO blocked_users (id, username, who_blocked) "
+                   f"VALUES ({str(his_id)}, '{str(his_username)}', '{str(who_blocked_username)}');")
+
+    con.commit()
+    con.close()
+
+
+def get_blocked_user_list():
+    blocked_users_list = []
+    a = 0
+
+    con = sqlite3.connect(files.main_db)
+    cursor = con.cursor()
+    try:
+        cursor.execute("SELECT id, username, who_blocked FROM blocked_users;")
+    except:
+        cursor.execute("CREATE TABLE IF NOT EXISTS blocked_users (id INT, username TEXT, who_blocked TEXT);")
+        cursor.execute("SELECT id, username, who_blocked FROM blocked_users;")
+
+    for id_a, name, who_blocked in cursor.fetchall():
+        a += 1
+        author = (id_a, name, who_blocked)
+        blocked_users_list.append(author)
+
+    con.close()
+    return blocked_users_list
+
+
 def get_author_list():
     authors_list = []
     a = 0
@@ -90,6 +132,9 @@ def get_moder_list():
 
 
 def new_author(settings, his_id, his_username, experience=None):
+    if his_id in [his_id for item in get_blocked_user_list() if his_id in item]:
+        del_id('blocked_users', his_id)
+
     con = sqlite3.connect(files.main_db)
     cursor = con.cursor()
 
@@ -152,10 +197,6 @@ def get_state(chat_id):
 def delete_state(chat_id):
     with shelve.open(files.state_bd) as bd:
         del bd[str(chat_id)]
-
-
-def new_blocked_user(his_id):
-    pass
 
 
 def check_message(message):
@@ -269,15 +310,6 @@ def delete_chat_value_message(message):
         del bd[str(message.chat.id)]
 
 
-def del_id(table, id_for_del):
-    con = sqlite3.connect(files.main_db)
-    cursor = con.cursor()
-
-    cursor.execute(f"DELETE FROM {str(table)} WHERE id = {str(id_for_del)};")
-    con.commit()
-    con.close()
-
-
 # изменение настроек бота и запись в файл настроек
 def change_settings(settings):
     new_settings = {
@@ -325,6 +357,8 @@ async def get_csv(bot, settings):
                     elif int(line[0]) == 777000:
                         continue
                     elif int(line[0]) == 136817688:
+                        continue
+                    elif int(line[0]) in [int(line[0]) for item in get_blocked_user_list() if int(line[0]) in item]:
                         continue
                     elif int(line[0]) in [int(line[0]) for item in get_admin_list() if int(line[0]) in item]:
                         continue
