@@ -1,18 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="e681271f-3981-4041-bfb5-42976b650e56" name="Changes" comment="HareLab_bot - added blocked users base, fixed entity bug">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bot/admin_panel.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot/admin_panel.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bot/author_panel.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot/author_panel.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bot/bot.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot/bot.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bot/data/bd/bot_message_bd.bd.dat" beforeDir="false" afterPath="$PROJECT_DIR$/bot/data/bd/bot_message_bd.bd.dat" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bot/data/bd/sost.bd.dat" beforeDir="false" afterPath="$PROJECT_DIR$/bot/data/bd/sost.bd.dat" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bot/data/db/main_data.db" beforeDir="false" afterPath="$PROJECT_DIR$/bot/data/db/main_data.db" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bot/data/media/posts_media/pic for post - test.jpeg" beforeDir="false" afterPath="$PROJECT_DIR$/bot/data/media/posts_media/pic for post - test.jpeg" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bot/extensions.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot/extensions.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bot/mod_panel.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot/mod_panel.py" afterDir="false" />
-    </list>
+    <list default="true" id="e681271f-3981-4041-bfb5-42976b650e56" name="Changes" comment="HareLab_bot - added forward post to other chat, changed global settings (forward id chat)" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -25,9 +14,11 @@
     <option name="RECENT_BRANCH_BY_REPOSITORY">
       <map>
         <entry key="$PROJECT_DIR$/.." value="master" />
+        <entry key="$PROJECT_DIR$" value="master" />
       </map>
     </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+    <option name="RESET_MODE" value="KEEP" />
   </component>
   <component name="MarkdownSettingsMigration">
     <option name="stateVersion" value="1" />
@@ -119,19 +110,7 @@
       <map>
         <entry key="MAIN">
           <value>
-            <State>
-              <option name="FILTERS">
-                <map>
-                  <entry key="branch">
-                    <value>
-                      <list>
-                        <option value="HareLab_bot" />
-                      </list>
-                    </value>
-                  </entry>
-                </map>
-              </option>
-            </State>
+            <State />
           </value>
         </entry>
       </map>
