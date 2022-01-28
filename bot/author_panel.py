@@ -969,17 +969,45 @@ async def in_author_panel(bot, settings, message):
                 if type(creation_post['pic_post']) is tuple:
                     if creation_post['pic_post'][0] == '':
                         message_result = await bot.send_message(settings.channel_name, text, entities=entity_list)
+
+                        try:
+                            await bot.forward_message(chat_id=settings.group_forward_id,
+                                                      from_chat_id=settings.channel_name,
+                                                      message_id=message_result.message_id)
+                        except Exception as e:
+                            logging.warning(e)
                     else:
                         photo = open(creation_post['pic_post'][0], 'rb')
                         message_result = await bot.send_photo(settings.channel_name,
                                                               photo, caption=text, caption_entities=entity_list)
+
+                        try:
+                            await bot.forward_message(chat_id=settings.group_forward_id,
+                                                      from_chat_id=settings.channel_name,
+                                                      message_id=message_result.message_id)
+                        except Exception as e:
+                            logging.warning(e)
                 else:
                     if creation_post['pic_post'] == '':
                         message_result = await bot.send_message(settings.channel_name, text, entities=entity_list)
+
+                        try:
+                            await bot.forward_message(chat_id=settings.group_forward_id,
+                                                      from_chat_id=settings.channel_name,
+                                                      message_id=message_result.message_id)
+                        except Exception as e:
+                            logging.warning(e)
                     else:
                         photo = open(creation_post['pic_post'], 'rb')
                         message_result = await bot.send_photo(settings.channel_name,
                                                               photo, caption=text, caption_entities=entity_list)
+
+                        try:
+                            await bot.forward_message(chat_id=settings.group_forward_id,
+                                                      from_chat_id=settings.channel_name,
+                                                      message_id=message_result.message_id)
+                        except Exception as e:
+                            logging.warning(e)
 
                 user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
                 user_markup.row('Посты')
@@ -2558,17 +2586,41 @@ async def author_inline(bot, callback_query, settings):
         if type(unposted_post['pic_post']) is tuple:
             if unposted_post['pic_post'][0] == '':
                 message_result = await bot.send_message(settings.channel_name, text, entities=entity_list)
+
+                try:
+                    await bot.forward_message(chat_id=settings.group_forward_id, from_chat_id=settings.channel_name,
+                                              message_id=message_result.message_id)
+                except Exception as e:
+                    logging.warning(e)
             else:
                 photo = open(unposted_post['pic_post'][0], 'rb')
                 message_result = await bot.send_photo(settings.channel_name,
                                                       photo, caption=text, caption_entities=entity_list)
+
+                try:
+                    await bot.forward_message(chat_id=settings.group_forward_id, from_chat_id=settings.channel_name,
+                                              message_id=message_result.message_id)
+                except Exception as e:
+                    logging.warning(e)
         else:
             if unposted_post['pic_post'] == '':
                 message_result = await bot.send_message(settings.channel_name, text, entities=entity_list)
+
+                try:
+                    await bot.forward_message(chat_id=settings.group_forward_id, from_chat_id=settings.channel_name,
+                                              message_id=message_result.message_id)
+                except Exception as e:
+                    logging.warning(e)
             else:
                 photo = open(unposted_post['pic_post'], 'rb')
                 message_result = await bot.send_photo(settings.channel_name,
                                                       photo, caption=text, caption_entities=entity_list)
+
+                try:
+                    await bot.forward_message(chat_id=settings.group_forward_id, from_chat_id=settings.channel_name,
+                                              message_id=message_result.message_id)
+                except Exception as e:
+                    logging.warning(e)
 
         user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
         user_markup.row('Посты')

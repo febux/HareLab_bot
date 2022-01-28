@@ -1,20 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="e681271f-3981-4041-bfb5-42976b650e56" name="Changes" comment="HareLab_bot - venv">
-      <change beforePath="$PROJECT_DIR$/.idea/HareLab_bot.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/HareLab_bot.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+    <list default="true" id="e681271f-3981-4041-bfb5-42976b650e56" name="Changes" comment="HareLab_bot - added blocked users base, fixed entity bug">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/bot/admin_panel.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot/admin_panel.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/bot/author_panel.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot/author_panel.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/bot/bot.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot/bot.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bot/data/bd/bot_message_bd.bd.dat" beforeDir="false" afterPath="$PROJECT_DIR$/bot/data/bd/bot_message_bd.bd.dat" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/bot/data/bd/sost.bd.dat" beforeDir="false" afterPath="$PROJECT_DIR$/bot/data/bd/sost.bd.dat" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/bot/data/db/main_data.db" beforeDir="false" afterPath="$PROJECT_DIR$/bot/data/db/main_data.db" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bot/defs.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot/defs.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bot/data/media/posts_media/pic for post - test.jpeg" beforeDir="false" afterPath="$PROJECT_DIR$/bot/data/media/posts_media/pic for post - test.jpeg" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bot/extensions.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot/extensions.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/bot/mod_panel.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot/mod_panel.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/venv/Scripts/activate" beforeDir="false" afterPath="$PROJECT_DIR$/venv/Scripts/activate" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/venv/Scripts/activate.fish" beforeDir="false" afterPath="$PROJECT_DIR$/venv/Scripts/activate.fish" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/venv/Scripts/activate.xsh" beforeDir="false" afterPath="$PROJECT_DIR$/venv/Scripts/activate.xsh" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -107,7 +104,14 @@
       <option name="project" value="LOCAL" />
       <updated>1643146411979</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="HareLab_bot - added blocked users base, fixed entity bug">
+      <created>1643237903441</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1643237903441</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -138,6 +142,7 @@
     <MESSAGE value="HareLab_bot - fixed states bug" />
     <MESSAGE value="HareLab_bot - new rep" />
     <MESSAGE value="HareLab_bot - venv" />
-    <option name="LAST_COMMIT_MESSAGE" value="HareLab_bot - venv" />
+    <MESSAGE value="HareLab_bot - added blocked users base, fixed entity bug" />
+    <option name="LAST_COMMIT_MESSAGE" value="HareLab_bot - added blocked users base, fixed entity bug" />
   </component>
 </project>

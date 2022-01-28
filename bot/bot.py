@@ -4,7 +4,7 @@ import aioschedule  # библиотека для выставления зад�
 
 # подключаем библиотеку для работы с API телеграм бота
 from aiogram import Bot, Dispatcher, types, executor
-from aiogram.types import ReplyKeyboardRemove
+from aiogram.types import ReplyKeyboardRemove, MessageEntity
 
 # подключение функций из сторонних файлов
 from admin_panel import in_admin_panel, first_launch, admin_panel, admin_inline
@@ -65,6 +65,17 @@ async def process_start_command(message: types.Message):
         elif message.chat.id in [message.chat.id for item in get_blocked_user_list() if message.chat.id in item]:
             await bot.send_message(message.chat.id, "Вы были заблокированы администратором бота!")
             await log(f'Blocked Author {message.chat.id} tried to start bot')
+        else:
+            entity_list = []
+            entity = MessageEntity(type="text_link",
+                                   offset=len("У вас недостаточно опыта для доступа к боту, пожалуйста, "
+                                              "проявите больше активностей в сообществе "),
+                                   length=len('HareCrypta'),
+                                   url='https://t.me/harecrypta_chat')
+            entity_list.append(entity)
+            await bot.send_message(message.chat.id, "У вас недостаточно опыта для доступа к боту, пожалуйста, "
+                                                    "проявите больше активностей в сообществе HareCrypta.",
+                                   entities=entity_list, disable_web_page_preview=True)
     else:
         pass
 
@@ -92,6 +103,17 @@ async def text_handler(message: types.Message):
             await in_author_panel(bot, settings, message)
         elif message.chat.id in [message.chat.id for item in get_blocked_user_list() if message.chat.id in item]:
             await bot.send_message(message.chat.id, "Вы были заблокированы администратором бота!")
+        else:
+            entity_list = []
+            entity = MessageEntity(type="text_link",
+                                   offset=len("У вас недостаточно опыта для доступа к боту, пожалуйста, "
+                                              "проявите больше активностей в сообществе "),
+                                   length=len('HareCrypta'),
+                                   url='https://t.me/harecrypta_chat')
+            entity_list.append(entity)
+            await bot.send_message(message.chat.id, "У вас недостаточно опыта для доступа к боту, пожалуйста, "
+                                                    "проявите больше активностей в сообществе HareCrypta.",
+                                   entities=entity_list, disable_web_page_preview=True)
     else:
         pass
 
@@ -112,6 +134,17 @@ async def document_handler(message: types.Message):
                 await in_author_panel(bot, settings, message)
         elif message.chat.id in [message.chat.id for item in get_blocked_user_list() if message.chat.id in item]:
             await bot.send_message(message.chat.id, "Вы были заблокированы администратором бота!")
+        else:
+            entity_list = []
+            entity = MessageEntity(type="text_link",
+                                   offset=len("У вас недостаточно опыта для доступа к боту, пожалуйста, "
+                                              "проявите больше активностей в сообществе "),
+                                   length=len('HareCrypta'),
+                                   url='https://t.me/harecrypta_chat')
+            entity_list.append(entity)
+            await bot.send_message(message.chat.id, "У вас недостаточно опыта для доступа к боту, пожалуйста, "
+                                                    "проявите больше активностей в сообществе HareCrypta.",
+                                   entities=entity_list, disable_web_page_preview=True)
     else:
         pass
 

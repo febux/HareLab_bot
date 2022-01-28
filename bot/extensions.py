@@ -20,8 +20,9 @@ class Settings:
         self.file_settings_global = open(files.settings_global, 'r')  # открываем файл для чтения
         self.settings_global = yaml.safe_load(self.file_settings_global)
         self.channel_name = str(self.settings_global['Settings_channel']['ChannelName'])
-        self.channel_id = str(self.settings_global['Settings_channel']['ChannelID'])
-        self.url_csv = f'https://combot.org/c/{self.channel_id}/chat_users/v2?csv=yes&limit=3000&skip=0'
+        self.group_id = str(self.settings_global['Settings_channel']['GroupID'])
+        self.group_forward_id = str(self.settings_global['Settings_channel']['GroupForwardID'])
+        self.url_csv = f'https://combot.org/c/{self.group_id}/chat_users/v2?csv=yes&limit=3000&skip=0'
         self.token = self.settings_global['Settings_bot']['Token']
         logging.info('Token was set')
         self.file_settings_global.close()
