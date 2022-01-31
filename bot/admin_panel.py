@@ -12,7 +12,8 @@ import files
 from config import admin_id
 from defs import get_admin_list, log, new_admin, get_state, del_id, get_moder_list, new_moder, \
     get_author_list, new_author, get_csv, delete_state, set_state, preview, edit_post, change_settings, \
-    set_chat_value_message, delete_chat_value_message, get_chat_value_message, get_blocked_user_list, new_blocked_user
+    set_chat_value_message, delete_chat_value_message, get_chat_value_message, get_blocked_user_list, new_blocked_user, \
+    emoji_count, entity_read
 
 # set logging level
 logging.basicConfig(filename=files.system_log, format='%(levelname)s:%(name)s:%(asctime)s:%(message)s',
@@ -169,21 +170,7 @@ async def in_admin_panel(bot, settings, message):
 
                     if "entities" in name_entities:
 
-                        for entity in name_entities["entities"]:
-                            entity_values_list = list(entity.values())
-
-                            if entity["type"] == "text_link":
-                                entity = MessageEntity(type=entity_values_list[0],
-                                                       offset=count_string_track + entity_values_list[1],
-                                                       length=entity_values_list[2], url=entity_values_list[3])
-                                entity_list.append(entity)
-                            elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
-                                                    "email", "phone_number", "bold", "italic", "underline",
-                                                    "strikethrough", "code", "pre"]:
-                                entity = MessageEntity(type=entity_values_list[0],
-                                                       offset=count_string_track + entity_values_list[1],
-                                                       length=entity_values_list[2])
-                                entity_list.append(entity)
+                        entity_list = entity_read(name_entities, entity_list, count_string_track)
 
                     count_string_track += len(post_name) + 3
 
@@ -773,14 +760,13 @@ async def in_admin_panel(bot, settings, message):
                         entity = MessageEntity(type=entity_values_list[0],
                                                offset=entity_values_list[1],
                                                length=entity_values_list[2], url=entity_values_list[3])
-                        help_entities.append(entity)
                     elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
                                             "email", "phone_number", "bold", "italic", "underline",
                                             "strikethrough", "code", "pre"]:
                         entity = MessageEntity(type=entity_values_list[0],
                                                offset=entity_values_list[1],
                                                length=entity_values_list[2])
-                        help_entities.append(entity)
+                    help_entities.append(entity)
 
             await bot.send_message(message.chat.id, "На данный момент сообщение help такое:")
             await bot.send_message(message.chat.id, help_text, entities=help_entities, reply_markup=user_markup)
@@ -806,14 +792,13 @@ async def in_admin_panel(bot, settings, message):
                         entity = MessageEntity(type=entity_values_list[0],
                                                offset=entity_values_list[1],
                                                length=entity_values_list[2], url=entity_values_list[3])
-                        footer_entities.append(entity)
                     elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
                                             "email", "phone_number", "bold", "italic", "underline",
                                             "strikethrough", "code", "pre"]:
                         entity = MessageEntity(type=entity_values_list[0],
                                                offset=entity_values_list[1],
                                                length=entity_values_list[2])
-                        footer_entities.append(entity)
+                    footer_entities.append(entity)
 
             await bot.send_message(message.chat.id, "На данный момент footer такой:")
             await bot.send_message(message.chat.id, footer_text, entities=footer_entities, reply_markup=user_markup)
@@ -937,7 +922,8 @@ async def in_admin_panel(bot, settings, message):
                 await bot.send_message(message.chat.id, 'Важное напоминание!!! '
                                                         'Определитесь, будет ли в нём картинка.'
                                                         'Если вы не добавите картинку сразу, '
-                                                        'то потом вы её не сможете уже добавить, и если картинка уже была,'
+                                                        'то потом вы её не сможете уже добавить, '
+                                                        'и если картинка уже была,'
                                                         'то вы не сможете её убрать!')
                 await bot.send_message(message.chat.id, 'Вставьте баннер (изображение) поста. '
                                                         'Или если нет баннера, то пропишите /empty', reply_markup=key)
@@ -1076,97 +1062,46 @@ async def in_admin_panel(bot, settings, message):
 
                 entity = MessageEntity(type="bold",
                                        offset=count_string_track,
-                                       length=len(creation_post['post_name']))
+                                       length=len(str(creation_post['post_name'])) +
+                                              len(emoji_count(str(creation_post['post_name']))))
                 entity_list.append(entity)
 
                 if "entities" in name_entities:
 
-                    for entity in name_entities["entities"]:
-                        entity_values_list = list(entity.values())
+                    entity_list = entity_read(name_entities, entity_list, count_string_track)
 
-                        if entity["type"] == "text_link":
-                            entity = MessageEntity(type=entity_values_list[0],
-                                                   offset=count_string_track + entity_values_list[1],
-                                                   length=entity_values_list[2], url=entity_values_list[3])
-                            entity_list.append(entity)
-                        elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
-                                                "email", "phone_number", "bold", "italic", "underline",
-                                                "strikethrough", "code"]:
-                            entity = MessageEntity(type=entity_values_list[0],
-                                                   offset=count_string_track + entity_values_list[1],
-                                                   length=entity_values_list[2])
-                            entity_list.append(entity)
-
-                count_string_track += len(str(creation_post['post_name'])) + len("\n\n")
+                count_string_track += len(str(creation_post['post_name'])) + len("\n\n") + \
+                                      len(emoji_count(str(creation_post['post_name'])))
 
                 if "entities" in description_entities:
 
-                    for entity in description_entities["entities"]:
-                        entity_values_list = list(entity.values())
+                    entity_list = entity_read(description_entities, entity_list, count_string_track)
 
-                        if entity["type"] == "text_link":
-                            entity = MessageEntity(type=entity_values_list[0],
-                                                   offset=count_string_track + entity_values_list[1],
-                                                   length=entity_values_list[2], url=entity_values_list[3])
-                            entity_list.append(entity)
-                        elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
-                                                "email", "phone_number", "bold", "italic", "underline",
-                                                "strikethrough", "code"]:
-                            entity = MessageEntity(type=entity_values_list[0],
-                                                   offset=count_string_track + entity_values_list[1],
-                                                   length=entity_values_list[2])
-                            entity_list.append(entity)
-
-                count_string_track += len(str(creation_post['post_desc'])) + len("\n\n")
+                count_string_track += len(str(creation_post['post_desc'])) + len("\n\n") + \
+                                      len(emoji_count(str(creation_post['post_desc'])))
 
                 if creation_post['what_needs'] != '':
                     count_string_track += len(str('✅ '))
 
                     if "entities" in what_needs_entities:
 
-                        for entity in what_needs_entities["entities"]:
-                            entity_values_list = list(entity.values())
+                        entity_list = entity_read(what_needs_entities, entity_list, count_string_track)
 
-                            if entity["type"] == "text_link":
-                                entity = MessageEntity(type=entity_values_list[0],
-                                                       offset=count_string_track + entity_values_list[1],
-                                                       length=entity_values_list[2], url=entity_values_list[3])
-                                entity_list.append(entity)
-                            elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
-                                                    "email", "phone_number", "bold", "italic", "underline",
-                                                    "strikethrough", "code"]:
-                                entity = MessageEntity(type=entity_values_list[0],
-                                                       offset=count_string_track + entity_values_list[1],
-                                                       length=entity_values_list[2])
-                                entity_list.append(entity)
-
-                    count_string_track += len(str(creation_post['what_needs'])) + len("\n\n")
+                    count_string_track += len(str(creation_post['what_needs'])) + len("\n\n") + \
+                                          len(emoji_count(str(creation_post['what_needs'])))
 
                 if creation_post['post_date'] != '':
                     count_string_track += len(str('📆 ')) + 1
 
                     if "entities" in date_entities:
 
-                        for entity in date_entities["entities"]:
-                            entity_values_list = list(entity.values())
+                        entity_list = entity_read(date_entities, entity_list, count_string_track)
 
-                            if entity["type"] == "text_link":
-                                entity = MessageEntity(type=entity_values_list[0],
-                                                       offset=count_string_track + entity_values_list[1],
-                                                       length=entity_values_list[2], url=entity_values_list[3])
-                                entity_list.append(entity)
-                            elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
-                                                    "email", "phone_number", "bold", "italic", "underline",
-                                                    "strikethrough", "code"]:
-                                entity = MessageEntity(type=entity_values_list[0],
-                                                       offset=count_string_track + entity_values_list[1],
-                                                       length=entity_values_list[2])
-                                entity_list.append(entity)
-
-                    count_string_track += len(str(creation_post['post_date'])) + len("\n\n")
+                    count_string_track += len(str(creation_post['post_date'])) + len("\n\n") + \
+                                          len(emoji_count(str(creation_post['post_date'])))
 
                 if creation_post['site'] != '' or creation_post['twitter'] != '' or creation_post['discord'] != '':
-                    count_string_track += len("🔗 ") + 1
+                    count_string_track += len(str("🔗 ")) + 1
                     if creation_post['site'] != '':
                         entity = MessageEntity(type="text_link",
                                                offset=count_string_track,
@@ -1217,63 +1152,91 @@ async def in_admin_panel(bot, settings, message):
 
                 if "entities" in footer_text_entities:
 
-                    for entity in footer_text_entities["entities"]:
-                        entity_values_list = list(entity.values())
+                    entity_list = entity_read(footer_text_entities, entity_list, count_string_track)
 
-                        if entity["type"] == "text_link":
-                            entity = MessageEntity(type=entity_values_list[0],
-                                                   offset=count_string_track + entity_values_list[1],
-                                                   length=entity_values_list[2], url=entity_values_list[3])
-                            entity_list.append(entity)
-                        elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
-                                                "email", "phone_number", "bold", "italic", "underline",
-                                                "strikethrough", "code"]:
-                            entity = MessageEntity(type=entity_values_list[0],
-                                                   offset=count_string_track + entity_values_list[1],
-                                                   length=entity_values_list[2])
-                            entity_list.append(entity)
+                count_string_track += len(f"{settings.footer_text}")
+
+                con = sqlite3.connect(files.main_db)
+                cursor = con.cursor()
 
                 if type(creation_post['pic_post']) is tuple:
                     if creation_post['pic_post'][0] == '':
-                        message_result = await bot.send_message(settings.channel_name, text, entities=entity_list)
                         try:
-                            await bot.forward_message(chat_id=settings.group_forward_id,
-                                                      from_chat_id=settings.channel_name,
-                                                      message_id=message_result.message_id)
+                            message_result = await bot.send_message(settings.channel_name, text, entities=entity_list)
                         except Exception as e:
                             logging.warning(e)
+                        else:
+                            await log(f"Post {str(creation_post['post_name'])} is posted by {message.chat.id}")
+
+                            cursor.execute(f"UPDATE posts SET status = 1, message_id = {message_result.message_id} "
+                                           f"WHERE post_name = '{str(creation_post['post_name'])}';")
+                            con.commit()
+
+                            try:
+                                await bot.forward_message(chat_id=settings.group_forward_id,
+                                                          from_chat_id=settings.channel_name,
+                                                          message_id=message_result.message_id)
+                            except Exception as e:
+                                logging.warning(e)
                     else:
                         photo = open(creation_post['pic_post'][0], 'rb')
-                        message_result = await bot.send_photo(settings.channel_name,
-                                                              photo, caption=text, caption_entities=entity_list)
-
                         try:
-                            await bot.forward_message(chat_id=settings.group_forward_id,
-                                                      from_chat_id=settings.channel_name,
-                                                      message_id=message_result.message_id)
+                            message_result = await bot.send_photo(settings.channel_name,
+                                                                  photo, caption=text, caption_entities=entity_list)
                         except Exception as e:
                             logging.warning(e)
+                        else:
+                            await log(f"Post {str(creation_post['post_name'])} is posted by {message.chat.id}")
+
+                            cursor.execute(f"UPDATE posts SET status = 1, message_id = {message_result.message_id} "
+                                           f"WHERE post_name = '{str(creation_post['post_name'])}';")
+                            con.commit()
+
+                            try:
+                                await bot.forward_message(chat_id=settings.group_forward_id,
+                                                          from_chat_id=settings.channel_name,
+                                                          message_id=message_result.message_id)
+                            except Exception as e:
+                                logging.warning(e)
                 else:
                     if creation_post['pic_post'] == '':
-                        message_result = await bot.send_message(settings.channel_name, text, entities=entity_list)
-
                         try:
-                            await bot.forward_message(chat_id=settings.group_forward_id,
-                                                      from_chat_id=settings.channel_name,
-                                                      message_id=message_result.message_id)
+                            message_result = await bot.send_message(settings.channel_name, text, entities=entity_list)
                         except Exception as e:
                             logging.warning(e)
+                        else:
+                            await log(f"Post {str(creation_post['post_name'])} is posted by {message.chat.id}")
+
+                            cursor.execute(f"UPDATE posts SET status = 1, message_id = {message_result.message_id} "
+                                           f"WHERE post_name = '{str(creation_post['post_name'])}';")
+                            con.commit()
+
+                            try:
+                                await bot.forward_message(chat_id=settings.group_forward_id,
+                                                          from_chat_id=settings.channel_name,
+                                                          message_id=message_result.message_id)
+                            except Exception as e:
+                                logging.warning(e)
                     else:
                         photo = open(creation_post['pic_post'], 'rb')
-                        message_result = await bot.send_photo(settings.channel_name,
-                                                              photo, caption=text, caption_entities=entity_list)
-
                         try:
-                            await bot.forward_message(chat_id=settings.group_forward_id,
-                                                      from_chat_id=settings.channel_name,
-                                                      message_id=message_result.message_id)
+                            message_result = await bot.send_photo(settings.channel_name,
+                                                                  photo, caption=text, caption_entities=entity_list)
                         except Exception as e:
                             logging.warning(e)
+                        else:
+                            await log(f"Post {str(creation_post['post_name'])} is posted by {message.chat.id}")
+
+                            cursor.execute(f"UPDATE posts SET status = 1, message_id = {message_result.message_id} "
+                                           f"WHERE post_name = '{str(creation_post['post_name'])}';")
+                            con.commit()
+
+                            try:
+                                await bot.forward_message(chat_id=settings.group_forward_id,
+                                                          from_chat_id=settings.channel_name,
+                                                          message_id=message_result.message_id)
+                            except Exception as e:
+                                logging.warning(e)
 
                 user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
                 user_markup.row('Посты')
@@ -1283,14 +1246,7 @@ async def in_admin_panel(bot, settings, message):
                 await bot.send_message(message.chat.id, 'Пост был создан и размещен на канале.',
                                        reply_markup=user_markup)
 
-                con = sqlite3.connect(files.main_db)
-                cursor = con.cursor()
-                cursor.execute(f"UPDATE posts SET status = 1, message_id = {message_result.message_id} "
-                               f"WHERE post_name = '{str(creation_post['post_name'])}';")
-                con.commit()
                 con.close()
-
-                await log(f"Post {str(creation_post['post_name'])} is posted by {message.chat.id}")
 
                 delete_chat_value_message(message)
                 delete_state(message.chat.id)
@@ -2858,112 +2814,50 @@ async def admin_inline(bot, callback_query, settings):
         what_needs_entities = json.loads(str(unposted_post['what_needs_entities']))
         footer_text_entities = json.loads(settings.footer_text_entities)
 
-        if type(unposted_post['pic_post']) is tuple:
-            if unposted_post['pic_post'][0] == '':
-                text_format_char = 4096
-            else:
-                text_format_char = 1024
-        else:
-            if unposted_post['pic_post'] == '':
-                text_format_char = 4096
-            else:
-                text_format_char = 1024
-
         count_string_track = 0
 
         entity = MessageEntity(type="bold",
                                offset=count_string_track,
-                               length=len(unposted_post['post_name']))
+                               length=len(str(unposted_post['post_name'])) +
+                                      len(emoji_count(str(unposted_post['post_name']))))
         entity_list.append(entity)
 
         if "entities" in name_entities:
 
-            for entity in name_entities["entities"]:
-                entity_values_list = list(entity.values())
+            entity_list = entity_read(name_entities, entity_list, count_string_track)
 
-                if entity["type"] == "text_link":
-                    entity = MessageEntity(type=entity_values_list[0],
-                                           offset=count_string_track + entity_values_list[1],
-                                           length=entity_values_list[2], url=entity_values_list[3])
-                    entity_list.append(entity)
-                elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
-                                        "email", "phone_number", "bold", "italic", "underline",
-                                        "strikethrough", "code"]:
-                    entity = MessageEntity(type=entity_values_list[0],
-                                           offset=count_string_track + entity_values_list[1],
-                                           length=entity_values_list[2])
-                    entity_list.append(entity)
-
-        count_string_track += len(str(unposted_post['post_name'])) + 2
+        count_string_track += len(str(unposted_post['post_name'])) + len("\n\n") + \
+                              len(emoji_count(str(unposted_post['post_name'])))
 
         if "entities" in description_entities:
 
-            for entity in description_entities["entities"]:
-                entity_values_list = list(entity.values())
+            entity_list = entity_read(description_entities, entity_list, count_string_track)
 
-                if entity["type"] == "text_link":
-                    entity = MessageEntity(type=entity_values_list[0],
-                                           offset=count_string_track + entity_values_list[1],
-                                           length=entity_values_list[2], url=entity_values_list[3])
-                    entity_list.append(entity)
-                elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
-                                        "email", "phone_number", "bold", "italic", "underline",
-                                        "strikethrough", "code"]:
-                    entity = MessageEntity(type=entity_values_list[0],
-                                           offset=count_string_track + entity_values_list[1],
-                                           length=entity_values_list[2])
-                    entity_list.append(entity)
-
-        count_string_track += len(str(unposted_post['post_desc']))
+        count_string_track += len(str(unposted_post['post_desc'])) + len("\n\n") + \
+                              len(emoji_count(str(unposted_post['post_desc'])))
 
         if unposted_post['what_needs'] != '':
-            count_string_track += len(str('\n\n✅ '))
+            count_string_track += len(str('✅ '))
 
             if "entities" in what_needs_entities:
 
-                for entity in what_needs_entities["entities"]:
-                    entity_values_list = list(entity.values())
+                entity_list = entity_read(what_needs_entities, entity_list, count_string_track)
 
-                    if entity["type"] == "text_link":
-                        entity = MessageEntity(type=entity_values_list[0],
-                                               offset=count_string_track + entity_values_list[1],
-                                               length=entity_values_list[2], url=entity_values_list[3])
-                        entity_list.append(entity)
-                    elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
-                                            "email", "phone_number", "bold", "italic", "underline",
-                                            "strikethrough", "code", "pre"]:
-                        entity = MessageEntity(type=entity_values_list[0],
-                                               offset=count_string_track + entity_values_list[1],
-                                               length=entity_values_list[2])
-                        entity_list.append(entity)
-
-            count_string_track += len(str(unposted_post['what_needs']))
+            count_string_track += len(str(unposted_post['what_needs'])) + len("\n\n") + \
+                                  len(emoji_count(str(unposted_post['what_needs'])))
 
         if unposted_post['post_date'] != '':
-            count_string_track += len(str('\n\n📆 '))
+            count_string_track += len(str('📆 ')) + 1
 
             if "entities" in date_entities:
 
-                for entity in date_entities["entities"]:
-                    entity_values_list = list(entity.values())
+                entity_list = entity_read(date_entities, entity_list, count_string_track)
 
-                    if entity["type"] == "text_link":
-                        entity = MessageEntity(type=entity_values_list[0],
-                                               offset=count_string_track + entity_values_list[1],
-                                               length=entity_values_list[2], url=entity_values_list[3])
-                        entity_list.append(entity)
-                    elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
-                                            "email", "phone_number", "bold", "italic", "underline",
-                                            "strikethrough", "code", "pre"]:
-                        entity = MessageEntity(type=entity_values_list[0],
-                                               offset=count_string_track + entity_values_list[1],
-                                               length=entity_values_list[2])
-                        entity_list.append(entity)
-
-            count_string_track += len(str(unposted_post['post_date'])) + 1
+            count_string_track += len(str(unposted_post['post_date'])) + len("\n\n") + \
+                                  len(emoji_count(str(unposted_post['post_date'])))
 
         if unposted_post['site'] != '' or unposted_post['twitter'] != '' or unposted_post['discord'] != '':
-            count_string_track += len("\n\n🔗 ") + 1
+            count_string_track += len(str("🔗 ")) + 1
             if unposted_post['site'] != '':
                 entity = MessageEntity(type="text_link",
                                        offset=count_string_track,
@@ -2981,7 +2875,7 @@ async def admin_inline(bot, callback_query, settings):
                     count_string_track += len("Twitter ")
                 else:
                     entity = MessageEntity(type="text_link",
-                                           offset=count_string_track + 2,
+                                           offset=count_string_track + len("| "),
                                            length=len("Twitter"),
                                            url=f"{unposted_post['twitter']}")
                     entity_list.append(entity)
@@ -2996,14 +2890,14 @@ async def admin_inline(bot, callback_query, settings):
                     count_string_track += len("Discord")
                 else:
                     entity = MessageEntity(type="text_link",
-                                           offset=count_string_track + 2,
+                                           offset=count_string_track + len("| "),
                                            length=len("Discord"),
                                            url=f"{unposted_post['discord']}")
                     entity_list.append(entity)
                     count_string_track += len("| Discord")
             count_string_track += len("\n\n")
 
-        count_string_track += len(str(unposted_post['hashtags'])) + 2
+        count_string_track += len(str(unposted_post['hashtags'])) + len("\n\n")
 
         entity = MessageEntity(type="italic",
                                offset=count_string_track,
@@ -3014,72 +2908,99 @@ async def admin_inline(bot, callback_query, settings):
 
         if "entities" in footer_text_entities:
 
-            for entity in footer_text_entities["entities"]:
-                entity_values_list = list(entity.values())
+            entity_list = entity_read(footer_text_entities, entity_list, count_string_track)
 
-                if entity["type"] == "text_link":
-                    entity = MessageEntity(type=entity_values_list[0],
-                                           offset=count_string_track + entity_values_list[1],
-                                           length=entity_values_list[2], url=entity_values_list[3])
-                    entity_list.append(entity)
-                elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
-                                        "email", "phone_number", "bold", "italic", "underline",
-                                        "strikethrough", "code"]:
-                    entity = MessageEntity(type=entity_values_list[0],
-                                           offset=count_string_track + entity_values_list[1],
-                                           length=entity_values_list[2])
-                    entity_list.append(entity)
+        count_string_track += len(f"{settings.footer_text}")
+
+        con = sqlite3.connect(files.main_db)
+        cursor = con.cursor()
 
         if type(unposted_post['pic_post']) is tuple:
             if unposted_post['pic_post'][0] == '':
-                message_result = await bot.send_message(settings.channel_name, text, entities=entity_list)
-
                 try:
-                    await bot.forward_message(chat_id=settings.group_forward_id, from_chat_id=settings.channel_name,
-                                              message_id=message_result.message_id)
+                    message_result = await bot.send_message(settings.channel_name, text, entities=entity_list)
                 except Exception as e:
                     logging.warning(e)
+                else:
+                    await log(f"Post {str(unposted_post['post_name'])} is posted by {callback_query.message.chat.id}")
+
+                    cursor.execute(f"UPDATE posts SET status = 1, message_id = {message_result.message_id} "
+                                   f"WHERE post_name = '{str(unposted_post['post_name'])}';")
+                    con.commit()
+
+                    try:
+                        await bot.forward_message(chat_id=settings.group_forward_id,
+                                                  from_chat_id=settings.channel_name,
+                                                  message_id=message_result.message_id)
+                    except Exception as e:
+                        logging.warning(e)
             else:
                 photo = open(unposted_post['pic_post'][0], 'rb')
-                message_result = await bot.send_photo(settings.channel_name,
-                                                      photo, caption=text, caption_entities=entity_list)
-
                 try:
-                    await bot.forward_message(chat_id=settings.group_forward_id, from_chat_id=settings.channel_name,
-                                              message_id=message_result.message_id)
+                    message_result = await bot.send_photo(settings.channel_name,
+                                                          photo, caption=text, caption_entities=entity_list)
                 except Exception as e:
                     logging.warning(e)
+                else:
+                    await log(f"Post {str(unposted_post['post_name'])} is posted by {callback_query.message.chat.id}")
+
+                    cursor.execute(f"UPDATE posts SET status = 1, message_id = {message_result.message_id} "
+                                   f"WHERE post_name = '{str(unposted_post['post_name'])}';")
+                    con.commit()
+
+                    try:
+                        await bot.forward_message(chat_id=settings.group_forward_id,
+                                                  from_chat_id=settings.channel_name,
+                                                  message_id=message_result.message_id)
+                    except Exception as e:
+                        logging.warning(e)
         else:
             if unposted_post['pic_post'] == '':
-                message_result = await bot.send_message(settings.channel_name, text, entities=entity_list)
-
                 try:
-                    await bot.forward_message(chat_id=settings.group_forward_id, from_chat_id=settings.channel_name,
-                                              message_id=message_result.message_id)
+                    message_result = await bot.send_message(settings.channel_name, text, entities=entity_list)
                 except Exception as e:
                     logging.warning(e)
+                else:
+                    await log(f"Post {str(unposted_post['post_name'])} is posted by {callback_query.message.chat.id}")
+
+                    cursor.execute(f"UPDATE posts SET status = 1, message_id = {message_result.message_id} "
+                                   f"WHERE post_name = '{str(unposted_post['post_name'])}';")
+                    con.commit()
+
+                    try:
+                        await bot.forward_message(chat_id=settings.group_forward_id,
+                                                  from_chat_id=settings.channel_name,
+                                                  message_id=message_result.message_id)
+                    except Exception as e:
+                        logging.warning(e)
             else:
                 photo = open(unposted_post['pic_post'], 'rb')
-                message_result = await bot.send_photo(settings.channel_name,
-                                                      photo, caption=text, caption_entities=entity_list)
-
                 try:
-                    await bot.forward_message(chat_id=settings.group_forward_id, from_chat_id=settings.channel_name,
-                                              message_id=message_result.message_id)
+                    message_result = await bot.send_photo(settings.channel_name,
+                                                          photo, caption=text, caption_entities=entity_list)
                 except Exception as e:
                     logging.warning(e)
+                else:
+                    await log(f"Post {str(unposted_post['post_name'])} is posted by {callback_query.message.chat.id}")
+
+                    cursor.execute(f"UPDATE posts SET status = 1, message_id = {message_result.message_id} "
+                                   f"WHERE post_name = '{str(unposted_post['post_name'])}';")
+                    con.commit()
+
+                    try:
+                        await bot.forward_message(chat_id=settings.group_forward_id,
+                                                  from_chat_id=settings.channel_name,
+                                                  message_id=message_result.message_id)
+                    except Exception as e:
+                        logging.warning(e)
 
         user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
         user_markup.row('Посты')
         user_markup.row('Списки')
         user_markup.row('Настройки бота')
+
         await bot.send_message(callback_query.message.chat.id, 'Пост был размещен на канале.', reply_markup=user_markup)
 
-        con = sqlite3.connect(files.main_db)
-        cursor = con.cursor()
-        cursor.execute(f"UPDATE posts SET status = 1, message_id = {str(message_result.message_id)} "
-                       f"WHERE post_name = '{str(unposted_post['post_name'])}';")
-        con.commit()
         con.close()
 
         delete_chat_value_message(callback_query.message)

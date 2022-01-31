@@ -1,8 +1,10 @@
 import logging
 import sqlite3
 import shelve
+import sys
 import yaml
 import pendulum
+import re
 
 from aiogram.types import MessageEntity, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.json import json
@@ -14,6 +16,27 @@ from config import admin_id
 logging.basicConfig(filename=files.system_log, format='%(levelname)s:%(name)s:%(asctime)s:%(message)s',
                     datefmt='%d.%m.%Y %I:%M:%S %p', level=logging.INFO)
 
+regrex_pattern = re.compile(pattern="["
+                                    u"\U0001F600-\U0001F64F"  # emoticons
+                                    u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+                                    u"\U0001F680-\U0001F6FF"  # transport & map symbols
+                                    u"\U0001F1E0-\U0001F1FF"  # flags (iOS)
+                                    u"\U00002500-\U00002BEF"  # chinese char
+                                    u"\U00002702-\U000027B0"
+                                    u"\U00002702-\U000027B0"
+                                    u"\U000024C2-\U0001F251"
+                                    u"\U0001F926-\U0001f937"
+                                    u"\U00010000-\U0010FFFF"
+                                    # u"\u2640-\u2642"
+                                    # u"\u2600-\u2B55"
+                                    # u"\u200d"
+                                    # u"\u23cf"
+                                    # u"\u23e9"
+                                    # u"\u231a"
+                                    # u"\ufe0f"  # dingbats
+                                    # u"\u3030"
+                                    "]+", flags=re.UNICODE)
+
 
 # запись в файл логирования
 async def log(text):
@@ -24,6 +47,32 @@ async def log(text):
     except:
         with open(files.working_log, 'w', encoding='utf-8') as f:
             f.write(time + '    | ' + text + '\n')
+
+
+def entity_read(entities, entity_list, count_string_track):
+    for entity in entities["entities"]:
+        entity_values_list = list(entity.values())
+
+        if entity["type"] == "text_link":
+            entity = MessageEntity(type=entity_values_list[0],
+                                   offset=count_string_track + entity_values_list[1],
+                                   length=entity_values_list[2], url=entity_values_list[3])
+        elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
+                                "email", "phone_number", "bold", "italic", "underline",
+                                "strikethrough", "code", "pre"]:
+            entity = MessageEntity(type=entity_values_list[0],
+                                   offset=count_string_track + entity_values_list[1],
+                                   length=entity_values_list[2])
+        entity_list.append(entity)
+    return entity_list
+
+
+def deEmojify(text):
+    return regrex_pattern.sub(r'', text)
+
+
+def emoji_count(text):
+    return regrex_pattern.findall(text)
 
 
 def del_id(table, id_for_del):
@@ -39,9 +88,11 @@ def new_blocked_user(his_id, his_username, who_blocked_username):
     con = sqlite3.connect(files.main_db)
     cursor = con.cursor()
 
-    cursor.execute("CREATE TABLE IF NOT EXISTS blocked_users (id INT, username TEXT, who_blocked TEXT);")
-    cursor.execute(f"INSERT OR IGNORE INTO blocked_users (id, username, who_blocked) "
-                   f"VALUES ({str(his_id)}, '{str(his_username)}', '{str(who_blocked_username)}');")
+    if his_id not in [his_id for item in get_admin_list() if his_id in item] and \
+            his_id not in [his_id for item in get_moder_list() if his_id in item]:
+        cursor.execute("CREATE TABLE IF NOT EXISTS blocked_users (id INT, username TEXT, who_blocked TEXT);")
+        cursor.execute(f"INSERT OR IGNORE INTO blocked_users (id, username, who_blocked) "
+                       f"VALUES ({str(his_id)}, '{str(his_username)}', '{str(who_blocked_username)}');")
 
     con.commit()
     con.close()
@@ -318,7 +369,7 @@ def change_settings(settings):
                 'ThresholdXP': settings.threshold_xp,
                 'TimeZone': settings.time_zone
             }
-                    }
+    }
     with open(files.settings_local, 'w') as f:
         yaml.dump(new_settings, f)
 
@@ -425,97 +476,46 @@ async def preview(bot, message, preview_post, settings):
 
     entity = MessageEntity(type="bold",
                            offset=count_string_track,
-                           length=len(preview_post['post_name']))
+                           length=len(str(preview_post['post_name'])) +
+                                  len(emoji_count(str(preview_post['post_name']))))
     entity_list.append(entity)
 
     if "entities" in name_entities:
 
-        for entity in name_entities["entities"]:
-            entity_values_list = list(entity.values())
+        entity_list = entity_read(name_entities, entity_list, count_string_track)
 
-            if entity["type"] == "text_link":
-                entity = MessageEntity(type=entity_values_list[0],
-                                       offset=count_string_track + entity_values_list[1],
-                                       length=entity_values_list[2], url=entity_values_list[3])
-                entity_list.append(entity)
-            elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
-                                    "email", "phone_number", "bold", "italic", "underline",
-                                    "strikethrough", "code"]:
-                entity = MessageEntity(type=entity_values_list[0],
-                                       offset=count_string_track + entity_values_list[1],
-                                       length=entity_values_list[2])
-                entity_list.append(entity)
-
-    count_string_track += len(str(preview_post['post_name'])) + len("\n\n")
+    count_string_track += len(str(preview_post['post_name'])) + len("\n\n") + \
+                          len(emoji_count(str(preview_post['post_name'])))
 
     if "entities" in description_entities:
 
-        for entity in description_entities["entities"]:
-            entity_values_list = list(entity.values())
+        entity_list = entity_read(description_entities, entity_list, count_string_track)
 
-            if entity["type"] == "text_link":
-                entity = MessageEntity(type=entity_values_list[0],
-                                       offset=count_string_track + entity_values_list[1],
-                                       length=entity_values_list[2], url=entity_values_list[3])
-                entity_list.append(entity)
-            elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
-                                    "email", "phone_number", "bold", "italic", "underline",
-                                    "strikethrough", "code"]:
-                entity = MessageEntity(type=entity_values_list[0],
-                                       offset=count_string_track + entity_values_list[1],
-                                       length=entity_values_list[2])
-                entity_list.append(entity)
-
-    count_string_track += len(str(preview_post['post_desc'])) + len("\n\n")
+    count_string_track += len(str(preview_post['post_desc'])) + len("\n\n") + \
+                          len(emoji_count(str(preview_post['post_desc'])))
 
     if preview_post['what_needs'] != '':
         count_string_track += len(str('✅ '))
 
         if "entities" in what_needs_entities:
 
-            for entity in what_needs_entities["entities"]:
-                entity_values_list = list(entity.values())
+            entity_list = entity_read(what_needs_entities, entity_list, count_string_track)
 
-                if entity["type"] == "text_link":
-                    entity = MessageEntity(type=entity_values_list[0],
-                                           offset=count_string_track + entity_values_list[1],
-                                           length=entity_values_list[2], url=entity_values_list[3])
-                    entity_list.append(entity)
-                elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
-                                        "email", "phone_number", "bold", "italic", "underline",
-                                        "strikethrough", "code"]:
-                    entity = MessageEntity(type=entity_values_list[0],
-                                           offset=count_string_track + entity_values_list[1],
-                                           length=entity_values_list[2])
-                    entity_list.append(entity)
-
-        count_string_track += len(str(preview_post['what_needs'])) + len("\n\n")
+        count_string_track += len(str(preview_post['what_needs'])) + len("\n\n") + \
+                              len(emoji_count(str(preview_post['what_needs'])))
 
     if preview_post['post_date'] != '':
         count_string_track += len(str('📆 ')) + 1
 
         if "entities" in date_entities:
 
-            for entity in date_entities["entities"]:
-                entity_values_list = list(entity.values())
+            entity_list = entity_read(date_entities, entity_list, count_string_track)
 
-                if entity["type"] == "text_link":
-                    entity = MessageEntity(type=entity_values_list[0],
-                                           offset=count_string_track + entity_values_list[1],
-                                           length=entity_values_list[2], url=entity_values_list[3])
-                    entity_list.append(entity)
-                elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
-                                        "email", "phone_number", "bold", "italic", "underline",
-                                        "strikethrough", "code"]:
-                    entity = MessageEntity(type=entity_values_list[0],
-                                           offset=count_string_track + entity_values_list[1],
-                                           length=entity_values_list[2])
-                    entity_list.append(entity)
-
-        count_string_track += len(str(preview_post['post_date'])) + len("\n\n")
+        count_string_track += len(str(preview_post['post_date'])) + len("\n\n") + \
+                              len(emoji_count(str(preview_post['post_date'])))
 
     if preview_post['site'] != '' or preview_post['twitter'] != '' or preview_post['discord'] != '':
-        count_string_track += len("🔗 ") + 1
+        count_string_track += len(str("🔗 ")) + 1
         if preview_post['site'] != '':
             entity = MessageEntity(type="text_link",
                                    offset=count_string_track,
@@ -566,21 +566,9 @@ async def preview(bot, message, preview_post, settings):
 
     if "entities" in footer_text_entities:
 
-        for entity in footer_text_entities["entities"]:
-            entity_values_list = list(entity.values())
+        entity_list = entity_read(footer_text_entities, entity_list, count_string_track)
 
-            if entity["type"] == "text_link":
-                entity = MessageEntity(type=entity_values_list[0],
-                                       offset=count_string_track + entity_values_list[1],
-                                       length=entity_values_list[2], url=entity_values_list[3])
-                entity_list.append(entity)
-            elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
-                                    "email", "phone_number", "bold", "italic", "underline",
-                                    "strikethrough", "code"]:
-                entity = MessageEntity(type=entity_values_list[0],
-                                       offset=count_string_track + entity_values_list[1],
-                                       length=entity_values_list[2])
-                entity_list.append(entity)
+    count_string_track += len(f"{settings.footer_text}")
 
     inline_status = InlineKeyboardMarkup()
     inline_status.add(InlineKeyboardButton(text=f"Статус: {'размещён' if preview_post['status'] else 'не размещён'}",
@@ -589,7 +577,8 @@ async def preview(bot, message, preview_post, settings):
     try:
         if type(preview_post['pic_post']) is tuple:
             if preview_post['pic_post'][0] == '':
-                await bot.send_message(message.chat.id, text, entities=entity_list, reply_markup=inline_status)
+                await bot.send_message(message.chat.id, text, entities=entity_list, reply_markup=inline_status,
+                                       disable_web_page_preview=True)
                 return True
             else:
                 photo = open(preview_post['pic_post'][0], 'rb')
@@ -598,7 +587,8 @@ async def preview(bot, message, preview_post, settings):
                 return True
         else:
             if preview_post['pic_post'] == '':
-                await bot.send_message(message.chat.id, text, entities=entity_list, reply_markup=inline_status)
+                await bot.send_message(message.chat.id, text, entities=entity_list, reply_markup=inline_status,
+                                       disable_web_page_preview=True)
                 return True
             else:
                 photo = open(preview_post['pic_post'], 'rb')
@@ -672,97 +662,46 @@ async def edit_post(bot, message, edited_post, settings, edit_picture):
 
     entity = MessageEntity(type="bold",
                            offset=count_string_track,
-                           length=len(edited_post['post_name']))
+                           length=len(str(edited_post['post_name'])) +
+                                  len(emoji_count(str(edited_post['post_name']))))
     entity_list.append(entity)
 
     if "entities" in name_entities:
 
-        for entity in name_entities["entities"]:
-            entity_values_list = list(entity.values())
+        entity_list = entity_read(name_entities, entity_list, count_string_track)
 
-            if entity["type"] == "text_link":
-                entity = MessageEntity(type=entity_values_list[0],
-                                       offset=count_string_track + entity_values_list[1],
-                                       length=entity_values_list[2], url=entity_values_list[3])
-                entity_list.append(entity)
-            elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
-                                    "email", "phone_number", "bold", "italic", "underline",
-                                    "strikethrough", "code"]:
-                entity = MessageEntity(type=entity_values_list[0],
-                                       offset=count_string_track + entity_values_list[1],
-                                       length=entity_values_list[2])
-                entity_list.append(entity)
-
-    count_string_track += len(str(edited_post['post_name'])) + len("\n\n")
+    count_string_track += len(str(edited_post['post_name'])) + len("\n\n") + \
+                          len(emoji_count(str(edited_post['post_name'])))
 
     if "entities" in description_entities:
 
-        for entity in description_entities["entities"]:
-            entity_values_list = list(entity.values())
+        entity_list = entity_read(description_entities, entity_list, count_string_track)
 
-            if entity["type"] == "text_link":
-                entity = MessageEntity(type=entity_values_list[0],
-                                       offset=count_string_track + entity_values_list[1],
-                                       length=entity_values_list[2], url=entity_values_list[3])
-                entity_list.append(entity)
-            elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
-                                    "email", "phone_number", "bold", "italic", "underline",
-                                    "strikethrough", "code"]:
-                entity = MessageEntity(type=entity_values_list[0],
-                                       offset=count_string_track + entity_values_list[1],
-                                       length=entity_values_list[2])
-                entity_list.append(entity)
-
-    count_string_track += len(str(edited_post['post_desc'])) + len("\n\n")
+    count_string_track += len(str(edited_post['post_desc'])) + len("\n\n") + \
+                          len(emoji_count(str(edited_post['post_desc'])))
 
     if edited_post['what_needs'] != '':
         count_string_track += len(str('✅ '))
 
         if "entities" in what_needs_entities:
 
-            for entity in what_needs_entities["entities"]:
-                entity_values_list = list(entity.values())
+            entity_list = entity_read(what_needs_entities, entity_list, count_string_track)
 
-                if entity["type"] == "text_link":
-                    entity = MessageEntity(type=entity_values_list[0],
-                                           offset=count_string_track + entity_values_list[1],
-                                           length=entity_values_list[2], url=entity_values_list[3])
-                    entity_list.append(entity)
-                elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
-                                        "email", "phone_number", "bold", "italic", "underline",
-                                        "strikethrough", "code"]:
-                    entity = MessageEntity(type=entity_values_list[0],
-                                           offset=count_string_track + entity_values_list[1],
-                                           length=entity_values_list[2])
-                    entity_list.append(entity)
-
-        count_string_track += len(str(edited_post['what_needs'])) + len("\n\n")
+        count_string_track += len(str(edited_post['what_needs'])) + len("\n\n") + \
+                              len(emoji_count(str(edited_post['what_needs'])))
 
     if edited_post['post_date'] != '':
         count_string_track += len(str('📆 ')) + 1
 
         if "entities" in date_entities:
 
-            for entity in date_entities["entities"]:
-                entity_values_list = list(entity.values())
+            entity_list = entity_read(date_entities, entity_list, count_string_track)
 
-                if entity["type"] == "text_link":
-                    entity = MessageEntity(type=entity_values_list[0],
-                                           offset=count_string_track + entity_values_list[1],
-                                           length=entity_values_list[2], url=entity_values_list[3])
-                    entity_list.append(entity)
-                elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
-                                        "email", "phone_number", "bold", "italic", "underline",
-                                        "strikethrough", "code"]:
-                    entity = MessageEntity(type=entity_values_list[0],
-                                           offset=count_string_track + entity_values_list[1],
-                                           length=entity_values_list[2])
-                    entity_list.append(entity)
-
-        count_string_track += len(str(edited_post['post_date'])) + len("\n\n")
+        count_string_track += len(str(edited_post['post_date'])) + len("\n\n") + \
+                              len(emoji_count(str(edited_post['post_date'])))
 
     if edited_post['site'] != '' or edited_post['twitter'] != '' or edited_post['discord'] != '':
-        count_string_track += len("🔗 ") + 1
+        count_string_track += len(str("🔗 ")) + 1
         if edited_post['site'] != '':
             entity = MessageEntity(type="text_link",
                                    offset=count_string_track,
@@ -813,21 +752,9 @@ async def edit_post(bot, message, edited_post, settings, edit_picture):
 
     if "entities" in footer_text_entities:
 
-        for entity in footer_text_entities["entities"]:
-            entity_values_list = list(entity.values())
+        entity_list = entity_read(footer_text_entities, entity_list, count_string_track)
 
-            if entity["type"] == "text_link":
-                entity = MessageEntity(type=entity_values_list[0],
-                                       offset=count_string_track + entity_values_list[1],
-                                       length=entity_values_list[2], url=entity_values_list[3])
-                entity_list.append(entity)
-            elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
-                                    "email", "phone_number", "bold", "italic", "underline",
-                                    "strikethrough", "code"]:
-                entity = MessageEntity(type=entity_values_list[0],
-                                       offset=count_string_track + entity_values_list[1],
-                                       length=entity_values_list[2])
-                entity_list.append(entity)
+    count_string_track += len(f"{settings.footer_text}")
 
     try:
         if edit_picture:
@@ -851,7 +778,7 @@ async def edit_post(bot, message, edited_post, settings, edit_picture):
             if type(edited_post['pic_post']) is tuple:
                 if edited_post['pic_post'][0] == '':
                     await bot.edit_message_text(chat_id=settings.channel_name, message_id=edited_post['message_id'],
-                                                text=text, entities=entity_list)
+                                                text=text, entities=entity_list, disable_web_page_preview=True)
                     return True
                 else:
                     await bot.edit_message_caption(chat_id=settings.channel_name, message_id=edited_post['message_id'],
@@ -860,7 +787,7 @@ async def edit_post(bot, message, edited_post, settings, edit_picture):
             else:
                 if edited_post['pic_post'] == '':
                     await bot.edit_message_text(chat_id=settings.channel_name, message_id=edited_post['message_id'],
-                                                text=text, entities=entity_list)
+                                                text=text, entities=entity_list, disable_web_page_preview=True)
                     return True
                 else:
                     await bot.edit_message_caption(chat_id=settings.channel_name, message_id=edited_post['message_id'],
@@ -878,4 +805,3 @@ async def edit_post(bot, message, edited_post, settings, edit_picture):
                                                     f'Сейчас количество символов: {len(text)}.\n'
                                                     f'Должно быть: {text_format_char}')
             return False
-
