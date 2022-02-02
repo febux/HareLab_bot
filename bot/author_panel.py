@@ -114,7 +114,7 @@ async def in_author_panel(bot, settings, message):
 
                         entity_list = entity_read(name_entities, entity_list, count_string_track)
 
-                    count_string_track += len(post_name) + 3
+                    count_string_track += len(post_name) + 3 + len(emoji_count(str(post_name)))
 
                     count_string_track += len(author_name) + 3 + len('Posted' if status else 'Not posted') + 1
 
@@ -496,6 +496,7 @@ async def in_author_panel(bot, settings, message):
                 con.close()
 
         elif message.text == 'Удалить пост':
+            await bot.delete_message(message.chat.id, message.message_id)
             con = sqlite3.connect(files.main_db)
             cursor = con.cursor()
             cursor.execute(f"SELECT author_name, post_name, post_date FROM posts WHERE author_id = {message.chat.id};")
@@ -514,6 +515,7 @@ async def in_author_panel(bot, settings, message):
             con.close()
 
         elif message.text == 'Списки':
+            await bot.delete_message(message.chat.id, message.message_id)
             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
             user_markup.row('Список авторов')
             user_markup.row('Список модераторов', 'Список админов')
@@ -522,30 +524,46 @@ async def in_author_panel(bot, settings, message):
             await bot.send_message(message.chat.id, "Выберите список для отображения", reply_markup=user_markup)
 
         elif message.text == 'Список авторов':
+            await bot.delete_message(message.chat.id, message.message_id)
+            a = 0
             authors = "Список авторов:\n\n"
-            if len(get_author_list()) != 0:
+            if len(get_admin_list()) != 0:
                 for author in get_author_list():
-                    authors += f"{author[0]} - @{author[1]} - {author[2]} XP\n"
+                    a += 1
+                    authors += f"{a}. {author[0]} - @{author[1]} - {author[2]} XP\n"
 
+                    if a % 50 == 0:
+                        await bot.send_message(message.chat.id, authors, parse_mode="HTML")
                 await bot.send_message(message.chat.id, authors, parse_mode="HTML")
             else:
                 await bot.send_message(message.chat.id, "Авторов еще нет")
 
         elif message.text == 'Список админов':
+            await bot.delete_message(message.chat.id, message.message_id)
+            a = 0
             admins = "Список админов:\n\n"
             if len(get_admin_list()) != 0:
                 for admin in get_admin_list():
-                    admins += f"{admin[0]} - @{admin[1]}\n"
+                    a += 1
+                    admins += f"{a}. {admin[0]} - @{admin[1]}\n"
 
+                    if a % 50 == 0:
+                        await bot.send_message(message.chat.id, admins, parse_mode="HTML")
                 await bot.send_message(message.chat.id, admins, parse_mode="HTML")
             else:
                 await bot.send_message(message.chat.id, "Админов еще нет")
 
         elif message.text == 'Список модераторов':
+            await bot.delete_message(message.chat.id, message.message_id)
+            a = 0
             moders = "Список модераторов:\n\n"
             if len(get_moder_list()) != 0:
                 for moder in get_moder_list():
-                    moders += f"{moder[0]} - @{moder[1]}\n"
+                    a += 1
+                    moders += f"{a}. {moder[0]} - @{moder[1]}\n"
+
+                    if a % 50 == 0:
+                        await bot.send_message(message.chat.id, moders, parse_mode="HTML")
                 await bot.send_message(message.chat.id, moders, parse_mode="HTML")
             else:
                 await bot.send_message(message.chat.id, "Модераторов еще нет")

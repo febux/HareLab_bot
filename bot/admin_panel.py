@@ -172,7 +172,7 @@ async def in_admin_panel(bot, settings, message):
 
                         entity_list = entity_read(name_entities, entity_list, count_string_track)
 
-                    count_string_track += len(post_name) + 3
+                    count_string_track += len(post_name) + 3 + len(emoji_count(str(post_name)))
 
                     count_string_track += len(author_name) + 3 + len('Posted' if status else 'Not posted') + 1
 
@@ -593,11 +593,16 @@ async def in_admin_panel(bot, settings, message):
             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
             user_markup.row('Добавить нового автора', 'Удалить автора')
             user_markup.row(main_menu)
+            a = 0
 
             authors = "Список авторов:\n\n"
             if len(get_admin_list()) != 0:
                 for author in get_author_list():
-                    authors += f"{author[0]} - @{author[1]} - {author[2]} XP\n"
+                    a += 1
+                    authors += f"{a}. {author[0]} - @{author[1]} - {author[2]} XP\n"
+
+                    if a % 50 == 0:
+                        await bot.send_message(message.chat.id, authors, reply_markup=user_markup, parse_mode="HTML")
 
                 await bot.send_message(message.chat.id, authors, reply_markup=user_markup, parse_mode="HTML")
             else:
@@ -631,12 +636,16 @@ async def in_admin_panel(bot, settings, message):
             await bot.delete_message(message.chat.id, message.message_id)
             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
             user_markup.row(main_menu)
+            a = 0
 
             authors = "Удалённые авторы:\n\n"
             if len(get_blocked_user_list()) != 0:
                 for author in get_blocked_user_list():
-                    authors += f"{author[0]} - {author[1]} - @{author[2]}\n"
+                    a += 1
+                    authors += f"{a}. {author[0]} - {author[1]} - @{author[2]}\n"
 
+                    if a % 50 == 0:
+                        await bot.send_message(message.chat.id, authors, reply_markup=user_markup, parse_mode="HTML")
                 await bot.send_message(message.chat.id, authors, reply_markup=user_markup, parse_mode="HTML")
             else:
                 await bot.send_message(message.chat.id, "Удалённых авторов еще нет", reply_markup=user_markup)
@@ -646,12 +655,16 @@ async def in_admin_panel(bot, settings, message):
             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
             user_markup.row('Добавить нового админа', 'Удалить админа')
             user_markup.row(main_menu)
+            a = 0
 
             admins = "Список админов:\n\n"
             if len(get_admin_list()) != 0:
                 for admin in get_admin_list():
-                    admins += f"{admin[0]} - @{admin[1]}\n"
+                    a += 1
+                    admins += f"{a}. {admin[0]} - @{admin[1]}\n"
 
+                    if a % 50 == 0:
+                        await bot.send_message(message.chat.id, admins, reply_markup=user_markup, parse_mode="HTML")
                 await bot.send_message(message.chat.id, admins, reply_markup=user_markup, parse_mode="HTML")
             else:
                 await bot.send_message(message.chat.id, "Админов еще нет", reply_markup=user_markup)
@@ -685,11 +698,16 @@ async def in_admin_panel(bot, settings, message):
             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
             user_markup.row('Добавить нового модератора', 'Удалить модератора')
             user_markup.row(main_menu)
+            a = 0
 
             moders = "Список модераторов:\n\n"
             if len(get_moder_list()) != 0:
                 for moder in get_moder_list():
-                    moders += f"{moder[0]} - @{moder[1]}\n"
+                    a += 1
+                    moders += f"{a}. {moder[0]} - @{moder[1]}\n"
+
+                    if a % 50 == 0:
+                        await bot.send_message(message.chat.id, moders, reply_markup=user_markup, parse_mode="HTML")
                 await bot.send_message(message.chat.id, moders, reply_markup=user_markup, parse_mode="HTML")
             else:
                 await bot.send_message(message.chat.id, "Модераторов еще нет", reply_markup=user_markup)
