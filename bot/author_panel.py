@@ -534,6 +534,8 @@ async def in_author_panel(bot, settings, message):
 
                     if a % 50 == 0:
                         await bot.send_message(message.chat.id, authors, parse_mode="HTML")
+                        authors = ''
+
                 await bot.send_message(message.chat.id, authors, parse_mode="HTML")
             else:
                 await bot.send_message(message.chat.id, "Авторов еще нет")
@@ -549,6 +551,8 @@ async def in_author_panel(bot, settings, message):
 
                     if a % 50 == 0:
                         await bot.send_message(message.chat.id, admins, parse_mode="HTML")
+                        admins = ''
+
                 await bot.send_message(message.chat.id, admins, parse_mode="HTML")
             else:
                 await bot.send_message(message.chat.id, "Админов еще нет")
@@ -564,6 +568,8 @@ async def in_author_panel(bot, settings, message):
 
                     if a % 50 == 0:
                         await bot.send_message(message.chat.id, moders, parse_mode="HTML")
+                        moders = ''
+
                 await bot.send_message(message.chat.id, moders, parse_mode="HTML")
             else:
                 await bot.send_message(message.chat.id, "Модераторов еще нет")

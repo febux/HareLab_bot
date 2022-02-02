@@ -603,6 +603,7 @@ async def in_admin_panel(bot, settings, message):
 
                     if a % 50 == 0:
                         await bot.send_message(message.chat.id, authors, reply_markup=user_markup, parse_mode="HTML")
+                        authors = ''
 
                 await bot.send_message(message.chat.id, authors, reply_markup=user_markup, parse_mode="HTML")
             else:
@@ -646,6 +647,8 @@ async def in_admin_panel(bot, settings, message):
 
                     if a % 50 == 0:
                         await bot.send_message(message.chat.id, authors, reply_markup=user_markup, parse_mode="HTML")
+                        authors = ''
+
                 await bot.send_message(message.chat.id, authors, reply_markup=user_markup, parse_mode="HTML")
             else:
                 await bot.send_message(message.chat.id, "Удалённых авторов еще нет", reply_markup=user_markup)
@@ -665,6 +668,8 @@ async def in_admin_panel(bot, settings, message):
 
                     if a % 50 == 0:
                         await bot.send_message(message.chat.id, admins, reply_markup=user_markup, parse_mode="HTML")
+                        admins = ''
+
                 await bot.send_message(message.chat.id, admins, reply_markup=user_markup, parse_mode="HTML")
             else:
                 await bot.send_message(message.chat.id, "Админов еще нет", reply_markup=user_markup)
@@ -708,6 +713,8 @@ async def in_admin_panel(bot, settings, message):
 
                     if a % 50 == 0:
                         await bot.send_message(message.chat.id, moders, reply_markup=user_markup, parse_mode="HTML")
+                        moders = ''
+
                 await bot.send_message(message.chat.id, moders, reply_markup=user_markup, parse_mode="HTML")
             else:
                 await bot.send_message(message.chat.id, "Модераторов еще нет", reply_markup=user_markup)
