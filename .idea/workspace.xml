@@ -1,14 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="e681271f-3981-4041-bfb5-42976b650e56" name="Changes" comment="HareLab_bot - count of lists added, list of posts bug fixed">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bot/admin_panel.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot/admin_panel.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bot/author_panel.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot/author_panel.py" afterDir="false" />
+    <list default="true" id="e681271f-3981-4041-bfb5-42976b650e56" name="Changes" comment="HareLab_bot - lists show bug fixed">
       <change beforePath="$PROJECT_DIR$/bot/data/bd/bot_message_bd.bd.dat" beforeDir="false" afterPath="$PROJECT_DIR$/bot/data/bd/bot_message_bd.bd.dat" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/bot/data/bd/sost.bd.dat" beforeDir="false" afterPath="$PROJECT_DIR$/bot/data/bd/sost.bd.dat" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/bot/data/db/main_data.db" beforeDir="false" afterPath="$PROJECT_DIR$/bot/data/db/main_data.db" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bot/mod_panel.py" beforeDir="false" afterPath="$PROJECT_DIR$/bot/mod_panel.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -131,7 +127,14 @@
       <option name="project" value="LOCAL" />
       <updated>1643827344539</updated>
     </task>
-    <option name="localTasksCounter" value="9" />
+    <task id="LOCAL-00009" summary="HareLab_bot - lists show bug fixed">
+      <created>1643831034705</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1643831034705</updated>
+    </task>
+    <option name="localTasksCounter" value="10" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -154,6 +157,7 @@
     <MESSAGE value="HareLab_bot - added forward post to other chat, changed global settings (forward id chat)" />
     <MESSAGE value="HareLab_bot - emoji bug fixed, code reviewed" />
     <MESSAGE value="HareLab_bot - count of lists added, list of posts bug fixed" />
-    <option name="LAST_COMMIT_MESSAGE" value="HareLab_bot - count of lists added, list of posts bug fixed" />
+    <MESSAGE value="HareLab_bot - lists show bug fixed" />
+    <option name="LAST_COMMIT_MESSAGE" value="HareLab_bot - lists show bug fixed" />
   </component>
 </project>
