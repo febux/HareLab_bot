@@ -1,7 +1,6 @@
 import logging
 import sqlite3
 import shelve
-import sys
 import yaml
 import pendulum
 import re
@@ -17,25 +16,14 @@ logging.basicConfig(filename=files.system_log, format='%(levelname)s:%(name)s:%(
                     datefmt='%d.%m.%Y %I:%M:%S %p', level=logging.INFO)
 
 regrex_pattern = re.compile(pattern="["
-                                    u"\U0001F600-\U0001F64F"  # emoticons
-                                    u"\U0001F300-\U0001F5FF"  # symbols & pictographs
-                                    u"\U0001F680-\U0001F6FF"  # transport & map symbols
-                                    u"\U0001F1E0-\U0001F1FF"  # flags (iOS)
-                                    # u"\U00002500-\U00002BEF"  # chinese char
-                                    # u"\U00002702-\U000027B0"
-                                    # u"\U00002702-\U000027B0"
+                                    u"\U0001F601-\U0001F64F"  # emoticons
+                                    u"\U0001F30D-\U0001F567"  # symbols & pictographs
+                                    u"\U0001F681-\U0001F6C5"  # transport & map symbols
+                                    u"\U0001F004-\U0001F5FF"  # uncategorized
                                     u"\U000026FD"
-                                    u"\U000024C2-\U0001F251"
-                                    u"\U0001F926-\U0001f937"
-                                    u"\U00010000-\U0010FFFF"
-                                    # u"\u2640-\u2642"
-                                    # u"\u2600-\u2B55"
-                                    # u"\u200d"
-                                    # u"\u23cf"
-                                    # u"\u23e9"
-                                    # u"\u231a"
-                                    # u"\ufe0f"  # dingbats
-                                    # u"\u3030"
+                                    u"\U000024C2-\U0001F251"  # flags
+                                    u"\U0001F926-\U0001F937"
+                                    u"\U0001F000-\U0001FFFF"
                                     "]+", flags=re.UNICODE)
 
 
@@ -73,7 +61,7 @@ def deEmojify(text):
 
 
 def emoji_count(text):
-    return regrex_pattern.findall(text)
+    return len(regrex_pattern.findall(text))
 
 
 def del_id(table, id_for_del):
@@ -460,7 +448,7 @@ async def preview(bot, message, preview_post, settings):
     description_entities = json.loads(str(preview_post['desc_entities']))
     date_entities = json.loads(str(preview_post['date_entities']))
     what_needs_entities = json.loads(str(preview_post['what_needs_entities']))
-    footer_text_entities = json.loads(settings.footer_text_entities)
+    footer_text_entities = json.loads(str(settings.footer_text_entities))
 
     if type(preview_post['pic_post']) is tuple:
         if preview_post['pic_post'][0] == '':
@@ -478,42 +466,38 @@ async def preview(bot, message, preview_post, settings):
     entity = MessageEntity(type="bold",
                            offset=count_string_track,
                            length=len(str(preview_post['post_name'])) +
-                                  len(emoji_count(str(preview_post['post_name']))))
+                                  emoji_count(str(preview_post['post_name'])))
     entity_list.append(entity)
 
     if "entities" in name_entities:
-
         entity_list = entity_read(name_entities, entity_list, count_string_track)
 
     count_string_track += len(str(preview_post['post_name'])) + len("\n\n") + \
-                          len(emoji_count(str(preview_post['post_name'])))
+                          emoji_count(str(preview_post['post_name']))
 
     if "entities" in description_entities:
-
         entity_list = entity_read(description_entities, entity_list, count_string_track)
 
     count_string_track += len(str(preview_post['post_desc'])) + len("\n\n") + \
-                          len(emoji_count(str(preview_post['post_desc'])))
+                          emoji_count(str(preview_post['post_desc']))
 
     if preview_post['what_needs'] != '':
         count_string_track += len(str('✅ '))
 
         if "entities" in what_needs_entities:
-
             entity_list = entity_read(what_needs_entities, entity_list, count_string_track)
 
         count_string_track += len(str(preview_post['what_needs'])) + len("\n\n") + \
-                              len(emoji_count(str(preview_post['what_needs'])))
+                              emoji_count(str(preview_post['what_needs']))
 
     if preview_post['post_date'] != '':
         count_string_track += len(str('📆 ')) + 1
 
         if "entities" in date_entities:
-
             entity_list = entity_read(date_entities, entity_list, count_string_track)
 
         count_string_track += len(str(preview_post['post_date'])) + len("\n\n") + \
-                              len(emoji_count(str(preview_post['post_date'])))
+                              emoji_count(str(preview_post['post_date']))
 
     if preview_post['site'] != '' or preview_post['twitter'] != '' or preview_post['discord'] != '':
         count_string_track += len(str("🔗 ")) + 1
@@ -566,7 +550,6 @@ async def preview(bot, message, preview_post, settings):
     count_string_track += len(f"Автор: @{preview_post['author_name']}\n")
 
     if "entities" in footer_text_entities:
-
         entity_list = entity_read(footer_text_entities, entity_list, count_string_track)
 
     count_string_track += len(f"{settings.footer_text}")
@@ -646,7 +629,7 @@ async def edit_post(bot, message, edited_post, settings, edit_picture):
     description_entities = json.loads(str(edited_post['desc_entities']))
     date_entities = json.loads(str(edited_post['date_entities']))
     what_needs_entities = json.loads(str(edited_post['what_needs_entities']))
-    footer_text_entities = json.loads(settings.footer_text_entities)
+    footer_text_entities = json.loads(str(settings.footer_text_entities))
 
     if type(edited_post['pic_post']) is tuple:
         if edited_post['pic_post'][0] == '':
@@ -664,42 +647,38 @@ async def edit_post(bot, message, edited_post, settings, edit_picture):
     entity = MessageEntity(type="bold",
                            offset=count_string_track,
                            length=len(str(edited_post['post_name'])) +
-                                  len(emoji_count(str(edited_post['post_name']))))
+                                  emoji_count(str(edited_post['post_name'])))
     entity_list.append(entity)
 
     if "entities" in name_entities:
-
         entity_list = entity_read(name_entities, entity_list, count_string_track)
 
     count_string_track += len(str(edited_post['post_name'])) + len("\n\n") + \
-                          len(emoji_count(str(edited_post['post_name'])))
+                          emoji_count(str(edited_post['post_name']))
 
     if "entities" in description_entities:
-
         entity_list = entity_read(description_entities, entity_list, count_string_track)
 
     count_string_track += len(str(edited_post['post_desc'])) + len("\n\n") + \
-                          len(emoji_count(str(edited_post['post_desc'])))
+                          emoji_count(str(edited_post['post_desc']))
 
     if edited_post['what_needs'] != '':
         count_string_track += len(str('✅ '))
 
         if "entities" in what_needs_entities:
-
             entity_list = entity_read(what_needs_entities, entity_list, count_string_track)
 
         count_string_track += len(str(edited_post['what_needs'])) + len("\n\n") + \
-                              len(emoji_count(str(edited_post['what_needs'])))
+                              emoji_count(str(edited_post['what_needs']))
 
     if edited_post['post_date'] != '':
         count_string_track += len(str('📆 ')) + 1
 
         if "entities" in date_entities:
-
             entity_list = entity_read(date_entities, entity_list, count_string_track)
 
         count_string_track += len(str(edited_post['post_date'])) + len("\n\n") + \
-                              len(emoji_count(str(edited_post['post_date'])))
+                              emoji_count(str(edited_post['post_date']))
 
     if edited_post['site'] != '' or edited_post['twitter'] != '' or edited_post['discord'] != '':
         count_string_track += len(str("🔗 ")) + 1
@@ -752,7 +731,6 @@ async def edit_post(bot, message, edited_post, settings, edit_picture):
     count_string_track += len(f"Автор: @{edited_post['author_name']}\n")
 
     if "entities" in footer_text_entities:
-
         entity_list = entity_read(footer_text_entities, entity_list, count_string_track)
 
     count_string_track += len(f"{settings.footer_text}")

@@ -121,7 +121,7 @@ async def in_moder_panel(bot, settings, message):
 
                         entity_list = entity_read(name_entities, entity_list, count_string_track)
 
-                    count_string_track += len(post_name) + 3 + len(emoji_count(str(post_name)))
+                    count_string_track += len(post_name) + 3 + emoji_count(str(post_name))
 
                     count_string_track += len(author_name) + 3 + len('Posted' if status else 'Not posted') + 1
 
@@ -863,14 +863,14 @@ async def in_moder_panel(bot, settings, message):
                 description_entities = json.loads(str(creation_post['desc_entities']))
                 date_entities = json.loads(str(creation_post['date_entities']))
                 what_needs_entities = json.loads(str(creation_post['what_needs_entities']))
-                footer_text_entities = json.loads(settings.footer_text_entities)
+                footer_text_entities = json.loads(str(settings.footer_text_entities))
 
                 count_string_track = 0
 
                 entity = MessageEntity(type="bold",
                                        offset=count_string_track,
                                        length=len(str(creation_post['post_name'])) +
-                                              len(emoji_count(str(creation_post['post_name']))))
+                                              emoji_count(str(creation_post['post_name'])))
                 entity_list.append(entity)
 
                 if "entities" in name_entities:
@@ -878,14 +878,14 @@ async def in_moder_panel(bot, settings, message):
                     entity_list = entity_read(name_entities, entity_list, count_string_track)
 
                 count_string_track += len(str(creation_post['post_name'])) + len("\n\n") + \
-                                      len(emoji_count(str(creation_post['post_name'])))
+                                      emoji_count(str(creation_post['post_name']))
 
                 if "entities" in description_entities:
 
                     entity_list = entity_read(description_entities, entity_list, count_string_track)
 
                 count_string_track += len(str(creation_post['post_desc'])) + len("\n\n") + \
-                                      len(emoji_count(str(creation_post['post_desc'])))
+                                      emoji_count(str(creation_post['post_desc']))
 
                 if creation_post['what_needs'] != '':
                     count_string_track += len(str('✅ '))
@@ -895,7 +895,7 @@ async def in_moder_panel(bot, settings, message):
                         entity_list = entity_read(what_needs_entities, entity_list, count_string_track)
 
                     count_string_track += len(str(creation_post['what_needs'])) + len("\n\n") + \
-                                          len(emoji_count(str(creation_post['what_needs'])))
+                                          emoji_count(str(creation_post['what_needs']))
 
                 if creation_post['post_date'] != '':
                     count_string_track += len(str('📆 ')) + 1
@@ -905,7 +905,7 @@ async def in_moder_panel(bot, settings, message):
                         entity_list = entity_read(date_entities, entity_list, count_string_track)
 
                     count_string_track += len(str(creation_post['post_date'])) + len("\n\n") + \
-                                          len(emoji_count(str(creation_post['post_date'])))
+                                          emoji_count(str(creation_post['post_date']))
 
                 if creation_post['site'] != '' or creation_post['twitter'] != '' or creation_post['discord'] != '':
                     count_string_track += len(str("🔗 ")) + 1
@@ -2452,14 +2452,14 @@ async def moder_inline(bot, callback_query, settings):
         description_entities = json.loads(str(unposted_post['desc_entities']))
         date_entities = json.loads(str(unposted_post['date_entities']))
         what_needs_entities = json.loads(str(unposted_post['what_needs_entities']))
-        footer_text_entities = json.loads(settings.footer_text_entities)
+        footer_text_entities = json.loads(str(settings.footer_text_entities))
 
         count_string_track = 0
 
         entity = MessageEntity(type="bold",
                                offset=count_string_track,
                                length=len(str(unposted_post['post_name'])) +
-                                      len(emoji_count(str(unposted_post['post_name']))))
+                                      emoji_count(str(unposted_post['post_name'])))
         entity_list.append(entity)
 
         if "entities" in name_entities:
@@ -2467,14 +2467,14 @@ async def moder_inline(bot, callback_query, settings):
             entity_list = entity_read(name_entities, entity_list, count_string_track)
 
         count_string_track += len(str(unposted_post['post_name'])) + len("\n\n") + \
-                              len(emoji_count(str(unposted_post['post_name'])))
+                              emoji_count(str(unposted_post['post_name']))
 
         if "entities" in description_entities:
 
             entity_list = entity_read(description_entities, entity_list, count_string_track)
 
         count_string_track += len(str(unposted_post['post_desc'])) + len("\n\n") + \
-                              len(emoji_count(str(unposted_post['post_desc'])))
+                              emoji_count(str(unposted_post['post_desc']))
 
         if unposted_post['what_needs'] != '':
             count_string_track += len(str('✅ '))
@@ -2484,7 +2484,7 @@ async def moder_inline(bot, callback_query, settings):
                 entity_list = entity_read(what_needs_entities, entity_list, count_string_track)
 
             count_string_track += len(str(unposted_post['what_needs'])) + len("\n\n") + \
-                                  len(emoji_count(str(unposted_post['what_needs'])))
+                                  emoji_count(str(unposted_post['what_needs']))
 
         if unposted_post['post_date'] != '':
             count_string_track += len(str('📆 ')) + 1
@@ -2494,7 +2494,7 @@ async def moder_inline(bot, callback_query, settings):
                 entity_list = entity_read(date_entities, entity_list, count_string_track)
 
             count_string_track += len(str(unposted_post['post_date'])) + len("\n\n") + \
-                                  len(emoji_count(str(unposted_post['post_date'])))
+                                  emoji_count(str(unposted_post['post_date']))
 
         if unposted_post['site'] != '' or unposted_post['twitter'] != '' or unposted_post['discord'] != '':
             count_string_track += len(str("🔗 ")) + 1
