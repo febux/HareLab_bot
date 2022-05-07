@@ -1,14 +1,18 @@
 import logging
-import sqlite3
 import shelve
+from typing import Type, Union, List, Dict
+
 import yaml
 import pendulum
 import re
 
-from aiogram.types import MessageEntity, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram import Bot
+from aiogram.types import MessageEntity, InlineKeyboardMarkup, InlineKeyboardButton, Message
 from aiogram.utils.json import json
 
 import files
+from extensions import Settings
+from models import User, Author, Admin, BlockedUser
 from config import admin_id
 
 # set logging level
@@ -27,8 +31,23 @@ regrex_pattern = re.compile(pattern="["
                                     "]+", flags=re.UNICODE)
 
 
+async def do_reserve_copy_db():
+    current_time = pendulum.now("Europe/Moscow")
+    try:
+        with open(files.main_db, 'rb') as db:
+            db_bytes = db.read()
+            with open(f'{files.reserve_db_folder}reserve_copy_'
+                      f'({current_time.date()}---'
+                      f'{current_time.time().hour}-{current_time.time().minute}).db', 'wb') as rdb:
+                rdb.write(db_bytes)
+    except Exception as e:
+        logging.error(e)
+    else:
+        logging.info('Reserve copy of DB was created')
+
+
 # запись в файл логирования
-async def log(text):
+async def log(text: str):
     time = str(pendulum.now())
     try:
         with open(files.working_log, 'a', encoding='utf-8') as f:
@@ -38,7 +57,7 @@ async def log(text):
             f.write(time + '    | ' + text + '\n')
 
 
-def entity_read(entities, entity_list, count_string_track):
+def entity_read(entities: MessageEntity, entity_list: List, count_string_track: int) -> List:
     for entity in entities["entities"]:
         entity_values_list = list(entity.values())
 
@@ -56,175 +75,143 @@ def entity_read(entities, entity_list, count_string_track):
     return entity_list
 
 
-def deEmojify(text):
+def deEmojify(text: str) -> str:
     return regrex_pattern.sub(r'', text)
 
 
-def emoji_count(text):
+def emoji_count(text: str) -> int:
     return len(regrex_pattern.findall(text))
 
 
-def del_id(table, id_for_del):
-    con = sqlite3.connect(files.main_db)
-    cursor = con.cursor()
-
-    cursor.execute(f"DELETE FROM {str(table)} WHERE id = {str(id_for_del)};")
-    con.commit()
-    con.close()
+def del_id(table: Type[Union[Admin, Author]], id_for_del: int) -> None:
+    for obj in table.select():
+        if obj.profile.user_id == id_for_del:
+            obj.delete_instance()
 
 
-def new_blocked_user(his_id, his_username, who_blocked_username):
-    con = sqlite3.connect(files.main_db)
-    cursor = con.cursor()
-
-    if his_id not in [his_id for item in get_admin_list() if his_id in item] and \
-            his_id not in [his_id for item in get_moder_list() if his_id in item]:
-        cursor.execute("CREATE TABLE IF NOT EXISTS blocked_users (id INT, username TEXT, who_blocked TEXT);")
-        cursor.execute(f"INSERT OR IGNORE INTO blocked_users (id, username, who_blocked) "
-                       f"VALUES ({str(his_id)}, '{str(his_username)}', '{str(who_blocked_username)}');")
-
-    con.commit()
-    con.close()
-
-
-def get_blocked_user_list():
+def get_blocked_user_list() -> List:
     blocked_users_list = []
-    a = 0
 
-    con = sqlite3.connect(files.main_db)
-    cursor = con.cursor()
-    try:
-        cursor.execute("SELECT id, username, who_blocked FROM blocked_users;")
-    except:
-        cursor.execute("CREATE TABLE IF NOT EXISTS blocked_users (id INT, username TEXT, who_blocked TEXT);")
-        cursor.execute("SELECT id, username, who_blocked FROM blocked_users;")
+    for blocked_user in BlockedUser.select():
+        obj = (
+            blocked_user.profile.user_id,
+            blocked_user.profile.username,
+            blocked_user.who_blocked
+        )
+        blocked_users_list.append(obj)
 
-    for id_a, name, who_blocked in cursor.fetchall():
-        a += 1
-        author = (id_a, name, who_blocked)
-        blocked_users_list.append(author)
-
-    con.close()
     return blocked_users_list
 
 
-def get_author_list():
+def get_author_list() -> List:
     authors_list = []
-    a = 0
 
-    con = sqlite3.connect(files.main_db)
-    cursor = con.cursor()
-    try:
-        cursor.execute("SELECT id, username, experience FROM authors;")
-    except:
-        cursor.execute("CREATE TABLE IF NOT EXISTS authors (id INT, username TEXT, experience INT );")
-        cursor.execute("SELECT id, username, experience FROM authors;")
+    for author in Author.select():
+        obj = (author.profile.user_id, author.profile.username, author.experience)
+        authors_list.append(obj)
 
-    for id_a, name, exp in cursor.fetchall():
-        a += 1
-        author = (id_a, name, exp)
-        authors_list.append(author)
-
-    con.close()
     return authors_list
 
 
-def get_admin_list():
+def get_admin_list() -> List:
     admins_list = []
-    a = 0
 
-    con = sqlite3.connect(files.main_db)
-    cursor = con.cursor()
-    try:
-        cursor.execute("SELECT id, username FROM admins;")
-    except:
-        cursor.execute("CREATE TABLE IF NOT EXISTS admins (id INT, username TEXT);")
-        cursor.execute("SELECT id, username FROM admins;")
+    for admin in Admin.select().where(Admin.permissions == 'admin_permissions'):
+        obj = (admin.profile.user_id, admin.profile.username)
+        admins_list.append(obj)
 
-    for id_a, name in cursor.fetchall():
-        a += 1
-        admin = (id_a, name)
-        admins_list.append(admin)
-
-    con.close()
     return admins_list
 
 
-def get_moder_list():
+def get_moder_list() -> List:
     moders_list = []
-    a = 0
 
-    con = sqlite3.connect(files.main_db)
-    cursor = con.cursor()
-    try:
-        cursor.execute("SELECT id, username FROM moders;")
-    except:
-        cursor.execute("CREATE TABLE IF NOT EXISTS moders (id INT, username TEXT);")
-        cursor.execute("SELECT id, username FROM moders;")
+    for moder in Admin.select().where(Admin.permissions == 'moder_permissions'):
+        obj = (moder.profile.user_id, moder.profile.username)
+        moders_list.append(obj)
 
-    for id_m, name in cursor.fetchall():
-        a += 1
-        moder = (id_m, name)
-        moders_list.append(moder)
-
-    con.close()
     return moders_list
 
 
-def new_author(settings, his_id, his_username, experience=None):
+def new_author(settings: Settings, his_id: int, his_username: str, experience: int = None) -> str:
     if his_id in [his_id for item in get_blocked_user_list() if his_id in item]:
-        del_id('blocked_users', his_id)
+        del_id(BlockedUser, his_id)
 
-    con = sqlite3.connect(files.main_db)
-    cursor = con.cursor()
+    if experience is None or experience >= settings.threshold_xp:
+        if experience is None:
+            experience = 0
 
-    cursor.execute("CREATE TABLE IF NOT EXISTS authors (id INT, username TEXT, experience INT );")
-    if experience is None:
-        experience = 0
+        user, user_created = User.get_or_create(user_id=his_id, username=his_username)
+
         try:
-            cursor.execute("INSERT INTO authors (id, username, experience) "
-                           f"VALUES ({str(his_id)}, '{str(his_username)}', {str(experience)});")
-        except:
-            cursor.execute(f"UPDATE authors SET experience = {str(experience)} WHERE id = {str(his_id)};")
-    elif experience >= settings.threshold_xp:
-        try:
-            cursor.execute("INSERT INTO authors (id, username, experience) "
-                           f"VALUES ({str(his_id)}, '{str(his_username)}', {str(experience)});")
-        except:
-            cursor.execute(f"UPDATE authors SET experience = {str(experience)} WHERE id = {str(his_id)};")
-
-    con.commit()
-    con.close()
-
-
-def new_admin(his_id, his_username):
-    con = sqlite3.connect(files.main_db)
-    cursor = con.cursor()
-
-    cursor.execute("CREATE TABLE IF NOT EXISTS admins (id INT, username TEXT);")
-    cursor.execute(f"INSERT OR IGNORE INTO admins (id, username) VALUES ({str(his_id)}, '{str(his_username)}');")
-
-    con.commit()
-    con.close()
+            author, author_created = Author.get_or_create(profile_id=user,
+                                                          permissions='author_permissions',
+                                                          experience=experience)
+        except Exception as error:
+            logging.error(error)
+            return 'Данный пользователь уже состоит в другой группе'
+        else:
+            if author_created:
+                return 'Новый автор успешно добавлен'
+            else:
+                author.experience = experience
+                author.save()
+                return 'Профиль автора был обновлён'
 
 
-def new_moder(his_id, his_username):
-    con = sqlite3.connect(files.main_db)
-    cursor = con.cursor()
+def new_admin(his_id: int, his_username: str) -> str:
+    user, user_created = User.get_or_create(user_id=his_id, username=his_username)
 
-    cursor.execute("CREATE TABLE IF NOT EXISTS moders (id INT, username TEXT);")
-    cursor.execute(f"INSERT OR IGNORE INTO moders (id, username) VALUES ({str(his_id)}, '{str(his_username)}');")
+    try:
+        admin, admin_created = Admin.get_or_create(profile=user, permissions='admin_permissions')
+    except Exception as error:
+        logging.error(error)
+        return 'Данный пользователь уже состоит в другой группе'
+    else:
+        if admin_created:
+            return 'Новый админ успешно добавлен'
+        else:
+            return 'Такой админ уже существует'
 
-    con.commit()
-    con.close()
+
+def new_moder(his_id: int, his_username: str) -> str:
+    user, user_created = User.get_or_create(user_id=his_id, username=his_username)
+
+    try:
+        moder, moder_created = Admin.get_or_create(profile=user, permissions='moder_permissions')
+    except Exception as error:
+        logging.error(error)
+        return 'Данный пользователь уже состоит в другой группе'
+    else:
+        if moder_created:
+            return 'Новый модератор успешно добавлен'
+        else:
+            return 'Такой модератор уже существует'
 
 
-def set_state(chat_id, state):
+def new_blocked_user(his_id: int, his_username: str, who_blocked_username: str) -> str:
+    user, user_created = User.get_or_create(user_id=his_id, username=his_username)
+
+    try:
+        blocked_user, blocked_user_created = BlockedUser.get_or_create(
+            profile_id=user,
+            who_blocked=who_blocked_username
+        )
+    except Exception as error:
+        logging.error(error)
+    else:
+        if blocked_user_created:
+            return 'Пользователь успешно заблокирован'
+        else:
+            return 'Пользователь уже заблокирован'
+
+
+def set_state(chat_id: int, state: int) -> None:
     with shelve.open(files.state_bd) as bd:
         bd[str(chat_id)] = state
 
 
-def get_state(chat_id):
+def get_state(chat_id: int) -> Union[bool, object]:
     with shelve.open(files.state_bd) as bd:
         try:
             state_num = bd[str(chat_id)]
@@ -234,12 +221,12 @@ def get_state(chat_id):
             return state_num
 
 
-def delete_state(chat_id):
+def delete_state(chat_id: int) -> None:
     with shelve.open(files.state_bd) as bd:
         del bd[str(chat_id)]
 
 
-def check_message(message):
+def check_message(message: str) -> bool:
     with shelve.open(files.bot_message_bd) as bd:
         if message in bd:
             return True
@@ -247,7 +234,7 @@ def check_message(message):
             return False
 
 
-def set_chat_value_message(message, mode, pic_src=''):
+def set_chat_value_message(message: Message, mode: int, pic_src: str = '') -> None:
     if mode == 1:
         with shelve.open(files.bot_message_bd) as bd:
             bd[str(message.chat.id)] = {
@@ -335,7 +322,7 @@ def set_chat_value_message(message, mode, pic_src=''):
             bd[str(message.chat.id)] = temp_dict
 
 
-def get_chat_value_message(message):
+def get_chat_value_message(message: Message) -> Union[bool, object, Dict]:
     with shelve.open(files.bot_message_bd) as bd:
         try:
             value = bd[str(message.chat.id)]
@@ -345,13 +332,13 @@ def get_chat_value_message(message):
             return value
 
 
-def delete_chat_value_message(message):
+def delete_chat_value_message(message: Message) -> None:
     with shelve.open(files.bot_message_bd) as bd:
         del bd[str(message.chat.id)]
 
 
 # изменение настроек бота и запись в файл настроек
-def change_settings(settings):
+def change_settings(settings: Settings) -> None:
     new_settings = {
         'Settings_local':
             {
@@ -363,16 +350,12 @@ def change_settings(settings):
         yaml.dump(new_settings, f)
 
 
-async def get_csv(bot, settings):
+async def get_csv(settings: Settings) -> bool:
     try:
         csv = settings.session.get(settings.url_csv).text
     except:
         logging.info('Session was closed')
-        await bot.send_message(admin_id, 'Данные не могут быть обновлены!\n'
-                                         'Вставьте ссылку с одноразовым ключом для доступа к csv файлу! '
-                                         'Получите её у Combot по команде /onetime.')
-        with shelve.open(files.state_bd) as bd:
-            bd[str(admin_id)] = 55
+        set_state(admin_id, 55)
         return False
     else:
         with open('csv.csv', "w", encoding='utf-8') as file:
@@ -382,13 +365,8 @@ async def get_csv(bot, settings):
             for line in file.readlines():
                 if "<!DOCTYPE html>" in line:
                     settings.session.close()
-                    settings.session = None
-                    await bot.send_message(admin_id, 'Данные не могут быть обновлены!\n'
-                                                     'Вставьте действительную '
-                                                     'ссылку с одноразовым ключом для доступа к csv файлу! '
-                                                     'Получите её у Combot по команде /onetime.')
-                    with shelve.open(files.state_bd) as bd:
-                        bd[str(admin_id)] = 55
+                    logging.info('Session was closed')
+
                     return False
                 else:
                     line = line.split(',')
@@ -409,11 +387,11 @@ async def get_csv(bot, settings):
                             new_author(settings, int(line[0]), line[2], int(line[5]))
                         except ValueError:
                             pass
-            return True
+        return True
 
 
-async def preview(bot, message, preview_post, settings):
-    '''preview'''
+async def preview(bot: Bot, message: Message, preview_post: Dict, settings: Settings) -> bool:
+    """preview"""
     entity_list = []
     text = f"{preview_post['post_name']}\n\n" \
            f"{preview_post['post_desc']}\n\n"
@@ -593,8 +571,8 @@ async def preview(bot, message, preview_post, settings):
             return False
 
 
-async def edit_post(bot, message, edited_post, settings, edit_picture):
-    '''preview'''
+async def edit_post(bot: Bot, message: Message, edited_post: Dict, settings: Settings, edit_picture: bool) -> bool:
+    """preview"""
     entity_list = []
     text = f"{edited_post['post_name']}\n\n" \
            f"{edited_post['post_desc']}\n\n"
@@ -774,12 +752,7 @@ async def edit_post(bot, message, edited_post, settings, edit_picture):
                     return True
     except Exception as e:
         logging.error(e)
-        if str(e) == 'Media_caption_too_long':
-            await bot.send_message(message.chat.id, 'Пост слишком большой, нужно его сократить.\n'
-                                                    f'Сейчас количество символов: {len(text)}.\n'
-                                                    f'Должно быть: {text_format_char}')
-            return False
-        if str(e) == 'Message is too long':
+        if str(e) == 'Media_caption_too_long' or str(e) == 'Message is too long':
             await bot.send_message(message.chat.id, 'Пост слишком большой, нужно его сократить.\n'
                                                     f'Сейчас количество символов: {len(text)}.\n'
                                                     f'Должно быть: {text_format_char}')

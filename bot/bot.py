@@ -3,15 +3,13 @@ import logging
 import aioschedule  # библиотека для выставления заданий по расписанию
 
 # подключаем библиотеку для работы с API телеграм бота
-from aiogram import Bot, Dispatcher, types, executor
-from aiogram.types import ReplyKeyboardRemove, MessageEntity
+from aiogram import Bot, Dispatcher, executor
+from aiogram.types import MessageEntity, Message, CallbackQuery
 
 # подключение функций из сторонних файлов
-from admin_panel import in_admin_panel, first_launch, admin_panel, admin_inline
-from author_panel import author_inline, in_author_panel, author_panel
-from defs import get_admin_list, get_moder_list, log, get_csv, get_state, set_state, get_author_list, \
-    get_blocked_user_list
-from mod_panel import in_moder_panel, moder_panel, moder_inline
+from bot_panel import in_bot_panel, first_launch, panel, bot_inline
+from models import User
+from defs import get_csv, get_state, set_state, do_reserve_copy_db
 from extensions import Settings
 from config import admin_id
 import files
@@ -22,6 +20,10 @@ logging.basicConfig(filename=files.system_log, format='%(levelname)s:%(name)s:%(
 
 # настройка и инициализация бота
 settings = Settings()
+settings.get_local_settings()
+settings.get_global_settings()
+settings.get_phrases()
+
 bot = Bot(token=settings.token)
 logging.info('Settings are accepted')
 dp = Dispatcher(bot)
@@ -29,42 +31,15 @@ dp = Dispatcher(bot)
 
 # обработчик команды start
 @dp.message_handler(commands=['start'])
-async def process_start_command(message: types.Message):
+async def process_start_command(message: Message):
     if message.chat.type == 'private':
-        if (message.chat.id == admin_id or
-            message.chat.id in [message.chat.id for item in get_admin_list() if message.chat.id in item]) and \
-                await first_launch(bot, message.chat.id) is False:
-            await bot.send_message(message.chat.id, f"Привет, Админ {message.chat.username}!\n",
-                                   reply_markup=ReplyKeyboardRemove())
+        user = User.get_or_none(user_id=message.chat.id)
 
-            await bot.send_message(message.chat.id, "Я HareGems-бот!\n"
-                                                    "При помощи меня можно создать пост для канала "
-                                                    "HareCrypta - Лаборатория Идей!\n"
-                                                    "По команде /help можно получить "
-                                                    "дополнительную информацию")
-            await admin_panel(bot, message)
-            await log(f'Admin {message.chat.id} started bot')
-        elif message.chat.id in [message.chat.id for item in get_moder_list() if message.chat.id in item]:
-            await bot.send_message(message.chat.id, f"Привет, Модератор {message.chat.username}!")
-            await bot.send_message(message.chat.id, "Я HareGems-бот!\n"
-                                                    "При помощи меня можно создать пост для канала "
-                                                    "HareCrypta - Лаборатория Идей!\n"
-                                                    "По команде /help можно получить "
-                                                    "дополнительную информацию")
-            await moder_panel(bot, message)
-            await log(f'Moder {message.chat.id} started bot')
-        elif message.chat.id in [message.chat.id for item in get_author_list() if message.chat.id in item]:
-            await bot.send_message(message.chat.id, f"Привет, Автор {message.chat.username}!")
-            await bot.send_message(message.chat.id, "Я HareGems-бот!\n"
-                                                    "При помощи меня можно создать пост для канала "
-                                                    "HareCrypta - Лаборатория Идей!\n"
-                                                    "По команде /help можно получить "
-                                                    "дополнительную информацию")
-            await author_panel(bot, message)
-            await log(f'Author {message.chat.id} started bot')
-        elif message.chat.id in [message.chat.id for item in get_blocked_user_list() if message.chat.id in item]:
-            await bot.send_message(message.chat.id, "Вы были заблокированы администратором бота!")
-            await log(f'Blocked Author {message.chat.id} tried to start bot')
+        if user is not None or message.chat.id == admin_id:
+            if await first_launch() is False:
+                await panel(bot, message)
+            else:
+                await panel(bot, message, first__launch=True)
         else:
             entity_list = []
             entity = MessageEntity(type="text_link",
@@ -82,7 +57,7 @@ async def process_start_command(message: types.Message):
 
 # обработчик команды help
 @dp.message_handler(commands=['help'])
-async def process_help_command(message: types.Message):
+async def process_help_command(message: Message):
     if message.chat.type == 'private':
         await bot.send_message(message.chat.id, settings.help_text)
     else:
@@ -90,19 +65,14 @@ async def process_help_command(message: types.Message):
 
 
 # обработчик входных данных из сообщений
-# обработка команд для админ панели, для мод панели, для панели автора
+# обработка команд для панели бота
 @dp.message_handler(content_types=["text"])
-async def text_handler(message: types.Message):
+async def text_handler(message: Message):
     if message.chat.type == 'private':
-        if message.chat.id == admin_id or \
-                message.chat.id in [message.chat.id for item in get_admin_list() if message.chat.id in item]:
-            await in_admin_panel(bot, settings, message)
-        elif message.chat.id in [message.chat.id for item in get_moder_list() if message.chat.id in item]:
-            await in_moder_panel(bot, settings, message)
-        elif message.chat.id in [message.chat.id for item in get_author_list() if message.chat.id in item]:
-            await in_author_panel(bot, settings, message)
-        elif message.chat.id in [message.chat.id for item in get_blocked_user_list() if message.chat.id in item]:
-            await bot.send_message(message.chat.id, "Вы были заблокированы администратором бота!")
+        user = User.get_or_none(user_id=message.chat.id)
+
+        if user is not None or message.chat.id == admin_id:
+            await in_bot_panel(bot, settings, message)
         else:
             entity_list = []
             entity = MessageEntity(type="text_link",
@@ -120,20 +90,13 @@ async def text_handler(message: types.Message):
 
 # обработчик фото и документов (используется при загрузке баннеров для постов)
 @dp.message_handler(content_types=["document", "photo"])
-async def document_handler(message: types.Message):
+async def document_handler(message: Message):
     if message.chat.type == 'private':
-        if message.chat.id == admin_id or \
-                message.chat.id in [message.chat.id for item in get_admin_list() if message.chat.id in item]:
+        user = User.get_or_none(user_id=message.chat.id)
+
+        if user is not None or message.chat.id == admin_id:
             if get_state(message.chat.id) in [8, 21, 210]:
-                await in_admin_panel(bot, settings, message)
-        elif message.chat.id in [message.chat.id for item in get_moder_list() if message.chat.id in item]:
-            if get_state(message.chat.id) in [8, 21, 210]:
-                await in_moder_panel(bot, settings, message)
-        elif message.chat.id in [message.chat.id for item in get_author_list() if message.chat.id in item]:
-            if get_state(message.chat.id) in [8, 21, 210]:
-                await in_author_panel(bot, settings, message)
-        elif message.chat.id in [message.chat.id for item in get_blocked_user_list() if message.chat.id in item]:
-            await bot.send_message(message.chat.id, "Вы были заблокированы администратором бота!")
+                await in_bot_panel(bot, settings, message)
         else:
             entity_list = []
             entity = MessageEntity(type="text_link",
@@ -151,28 +114,21 @@ async def document_handler(message: types.Message):
 
 # обработчик коллбэков от инлайн кнопок
 @dp.callback_query_handler(lambda c: True)
-async def callback(callback_query: types.CallbackQuery):
+async def callback(callback_query: CallbackQuery):
     if callback_query.message:
         if callback_query.message.chat.type == 'private':
-            if callback_query.message.chat.id in [callback_query.message.chat.id
-                                                  for item in get_admin_list()
-                                                  if callback_query.message.chat.id in item]:
-                await admin_inline(bot, callback_query, settings)
-            elif callback_query.message.chat.id in [callback_query.message.chat.id
-                                                    for item in get_moder_list()
-                                                    if callback_query.message.chat.id in item]:
-                await moder_inline(bot, callback_query, settings)
-            elif callback_query.message.chat.id in [callback_query.message.chat.id
-                                                    for item in get_author_list()
-                                                    if callback_query.message.chat.id in item]:
-                await author_inline(bot, callback_query, settings)
+            user = User.get_or_none(user_id=callback_query.message.chat.id)
+
+            if user is not None or callback_query.message.chat.id == admin_id:
+                await bot_inline(bot, callback_query, settings)
 
         await bot.answer_callback_query(callback_query.id)
 
 
 # расписание задач
 async def scheduler():
-    aioschedule.every(60).minutes.do(get_csv, bot=bot, settings=settings)
+    aioschedule.every(5).minutes.do(get_csv, settings=settings)
+    aioschedule.every(48).hours.do(do_reserve_copy_db)
 
     while True:
         await aioschedule.run_pending()
@@ -188,11 +144,6 @@ async def on_startup(_):
     set_state(admin_id, 55)
 
 
-# функция при отключении бота
-async def on_shutdown(_):
-    get_list = 0
-
-
 # входная точка программы
 if __name__ == '__main__':
-    executor.start_polling(dp, skip_updates=False, on_startup=on_startup, on_shutdown=on_shutdown)
+    executor.start_polling(dp, skip_updates=False, on_startup=on_startup)

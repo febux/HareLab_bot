@@ -1,4 +1,6 @@
 main_db = 'data/db/main_data.db'
+reserve_db = 'data/db/reserve/main_reserve_copy.db'
+reserve_db_folder = 'data/db/reserve/'
 
 settings_local = 'settings_local.yaml'
 settings_global = 'settings_global.yaml'
