@@ -6,9 +6,7 @@ import files
 from peewee import Model, PrimaryKeyField, DateTimeField, CharField, \
     IntegerField, TextField, ForeignKeyField
 
-
-DATABASE = files.main_db
-database = SqliteDatabase(DATABASE)
+database = SqliteDatabase(files.main_db)
 
 
 class BaseModel(Model):

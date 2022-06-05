@@ -1,7 +1,8 @@
 # IDEA: сделать также изменение фразы для команды /start
-import shelve
-import requests
 import logging
+from logging.handlers import RotatingFileHandler
+import shelve
+import os
 
 from aiogram import Bot
 from aiogram.utils.json import json
@@ -11,31 +12,30 @@ from aiogram.types import ReplyKeyboardMarkup, InlineKeyboardMarkup, \
 import validators
 
 import files
-from extensions import Settings
+from extensions import Settings, SUPER_ADMIN_ID, TOTAL_RETRIES, \
+    CONNECT_RETRY, TIME_BETWEEN_ATTEMPTS, TIME_FOR_CONNECT, TIME_DATA_REC, Menu
 from models import Author, Admin, Post, BlockedUser, Phrase, User
-from config import admin_id
 from defs import get_admin_list, log, new_admin, get_state, del_id, get_moder_list, new_moder, \
     get_author_list, new_author, get_csv, delete_state, set_state, preview, edit_post, change_settings, \
     set_chat_value_message, delete_chat_value_message, get_chat_value_message, \
     get_blocked_user_list, new_blocked_user, \
-    emoji_count, entity_read
-
-# set logging level
-logging.basicConfig(filename=files.system_log, format='%(levelname)s:%(name)s:%(asctime)s:%(message)s',
-                    datefmt='%d.%m.%Y %I:%M:%S %p', level=logging.INFO)
-
-main_menu = '🏠 Главное меню'
+    emoji_count, entity_read, find_emoji, add_emoji_as_pattern
 
 
-async def first_launch() -> bool:
-    try:
-        with open(files.working_log, encoding='utf-8') as f:
-            return False
-    except:
-        return True
+# Create handlers
+console_handler = logging.StreamHandler()
+file_handler = RotatingFileHandler(files.system_log, mode='a',
+                                   maxBytes=2048000, backupCount=2,
+                                   encoding='utf-8', delay=True)
 
 
-async def panel(bot: Bot, message: Message, first__launch: bool = False) -> None:
+logging.basicConfig(
+    format="%(asctime)s::[%(levelname)s]::%(name)s::(%(filename)s).%(funcName)s(%(lineno)d)::%(message)s",
+    datefmt='%d.%m.%Y %I:%M:%S %p', level=logging.INFO, handlers=(file_handler, console_handler)
+)
+
+
+async def panel(settings: Settings, bot: Bot, message: Message) -> None:
     current_user = object
 
     for table in [Admin, Author, BlockedUser]:
@@ -47,13 +47,13 @@ async def panel(bot: Bot, message: Message, first__launch: bool = False) -> None
     if isinstance(current_user, BlockedUser):
         await bot.send_message(message.chat.id, "Вы были заблокированы администратором бота!")
         delete_state(message.chat.id)
-    elif isinstance(current_user, (Admin, Author)) or message.chat.id == admin_id:
+    elif isinstance(current_user, (Admin, Author)) or message.chat.id == SUPER_ADMIN_ID:
         user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-        user_markup.row('Посты')
-        user_markup.row('Списки')
+        user_markup.row(Menu.posts)
+        user_markup.row(Menu.lists)
 
-        if current_user.permissions == 'admin_permissions' or message.chat.id == admin_id:
-            user_markup.row('Настройки бота')
+        if current_user.permissions == 'admin_permissions' or message.chat.id == SUPER_ADMIN_ID:
+            user_markup.row(Menu.settings)
 
             await bot.send_message(message.chat.id, f"Привет, Админ {message.chat.username}!\n",
                                    reply_markup=ReplyKeyboardRemove())
@@ -62,7 +62,7 @@ async def panel(bot: Bot, message: Message, first__launch: bool = False) -> None
                                                     "HareCrypta - Лаборатория Идей!\n"
                                                     "По команде /help можно получить "
                                                     "дополнительную информацию")
-            await log(f'Admin {message.chat.id} started bot')
+            await log(settings, f'Admin {message.chat.id} started bot')
         elif current_user.permissions == 'moder_permissions':
             await bot.send_message(message.chat.id, f"Привет, Модератор {message.chat.username}!")
             await bot.send_message(message.chat.id, "Я HareGems-бот!\n"
@@ -70,7 +70,7 @@ async def panel(bot: Bot, message: Message, first__launch: bool = False) -> None
                                                     "HareCrypta - Лаборатория Идей!\n"
                                                     "По команде /help можно получить "
                                                     "дополнительную информацию")
-            await log(f'Moder {message.chat.id} started bot')
+            await log(settings, f'Moder {message.chat.id} started bot')
         elif current_user.permissions == 'author_permissions':
             await bot.send_message(message.chat.id, f"Привет, Автор {message.chat.username}!")
             await bot.send_message(message.chat.id, "Я HareGems-бот!\n"
@@ -78,16 +78,11 @@ async def panel(bot: Bot, message: Message, first__launch: bool = False) -> None
                                                     "HareCrypta - Лаборатория Идей!\n"
                                                     "По команде /help можно получить "
                                                     "дополнительную информацию")
-            await log(f'Author {message.chat.id} started bot')
+            await log(settings, f'Author {message.chat.id} started bot')
 
-        if first__launch:
-            await bot.send_message(message.chat.id, "Добро пожаловать в панель управления. Это первый запуск бота.",
-                                   reply_markup=user_markup)
-            await log(f'First launch bot panel by user {message.chat.id}')
-        else:
-            await bot.send_message(message.chat.id, "Добро пожаловать в панель управления.", reply_markup=user_markup)
+        await bot.send_message(message.chat.id, "Добро пожаловать в панель управления.", reply_markup=user_markup)
 
-            await log(f'Launch bot panel by user {message.chat.id}')
+        await log(settings, f'Launch bot panel by user {message.chat.id}')
     else:
         entity_list = []
         entity = MessageEntity(type="text_link",
@@ -156,10 +151,11 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
         где нужно вставить пересланное от пользователя сообщение (может сделать только один из админов)
     52 - удаление модератора из списка (может сделать только один из админов)
 
-    При настройке бота - состояние 61, 62:
+    При настройке бота - состояние 61, 62, 63, 65:
     61 - изменений выводной фразы по команде /help
     62 - изменение нижней подписи к постам
     63 - изменение порога опыта для авторов
+    65 - восстановление бд из резервной копии
 
 
     :param bot: Bot from aiogram
@@ -168,27 +164,32 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
     :return: None
     """
 
-    if get_state(message.chat.id) == 55 and message.chat.id == admin_id:
+    if get_state(message.chat.id) == 55 and message.chat.id == SUPER_ADMIN_ID:
         if 'https://combot.org/api/one_time_auth?hash=' in message.text:
             settings.url_one_time_link = message.text
+            settings.set_session_settings(
+                total_retries=TOTAL_RETRIES,
+                connect_retry=CONNECT_RETRY,
+                time_between_attempts=TIME_BETWEEN_ATTEMPTS,
+                time_for_connect=TIME_FOR_CONNECT,
+                time_for_data_rec=TIME_DATA_REC,
+            )
 
             try:
-                settings.session.get(settings.url_one_time_link, timeout=(3, 6))
+                settings.session.get(
+                    settings.url_one_time_link,
+                    timeout=(settings.time_for_connect, settings.time_for_data_rec)
+                )
             except Exception as e:
                 logging.error(e)
             else:
-                if await get_csv(settings):
+                if await get_csv(bot, settings):
                     logging.info('Session was opened')
-                    delete_state(message.chat.id)
+                    delete_state(SUPER_ADMIN_ID)
 
-                    await bot.send_message(admin_id, 'Спасибо, данные были обновлены.')
-                else:
-                    await bot.send_message(admin_id, 'Данные не могут быть обновлены!\n'
-                                                     'Вставьте ссылку с одноразовым ключом для доступа к csv файлу! '
-                                                     'Получите её у Combot по команде /onetime.')
-                    set_state(admin_id, 55)
+                    await bot.send_message(SUPER_ADMIN_ID, 'Спасибо, данные были обновлены.')
         else:
-            await bot.send_message(admin_id, 'Сначала введите ссылку для получения доступа к csv файлу.')
+            await bot.send_message(SUPER_ADMIN_ID, 'Сначала введите ссылку для получения доступа к csv файлу.')
             return
 
     current_user = object
@@ -202,28 +203,28 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
     if isinstance(current_user, BlockedUser):
         await bot.send_message(message.chat.id, "Вы были заблокированы администратором бота!")
         delete_state(message.chat.id)
-    elif isinstance(current_user, (Admin, Author)) or message.chat.id == admin_id:
-        if message.text == main_menu:
+    elif isinstance(current_user, (Admin, Author)) or message.chat.id == SUPER_ADMIN_ID:
+        if message.text == Menu.main_menu:
             await bot.delete_message(message.chat.id, message.message_id)
             if get_state(message.chat.id):
                 delete_state(message.chat.id)
-            if get_chat_value_message(message):
-                delete_chat_value_message(message)
+            if get_chat_value_message(message.chat.id):
+                delete_chat_value_message(message.chat.id)
             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-            user_markup.row('Посты')
-            user_markup.row('Списки')
+            user_markup.row(Menu.posts)
+            user_markup.row(Menu.lists)
             if current_user.permissions == 'admin_permissions':
-                user_markup.row('Настройки бота')
+                user_markup.row(Menu.settings)
 
             await bot.send_message(message.chat.id, 'Вы в главном меню бота.',
                                    reply_markup=user_markup)
 
-        elif message.text == 'Посты':
+        elif message.text == Menu.posts:
             await bot.delete_message(message.chat.id, message.message_id)
             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-            user_markup.row('Добавить новый пост', 'Удалить пост')
-            user_markup.row('Редактирование постов', 'Размещение постов')
-            user_markup.row(main_menu)
+            user_markup.row(Menu.MenuPosts.add_new_post, Menu.MenuPosts.delete_post)
+            user_markup.row(Menu.MenuPosts.edit_post, Menu.MenuPosts.posting)
+            user_markup.row(Menu.main_menu)
 
             entity_list = []
             count_string_track = len('Созданные посты:\n\n')
@@ -236,7 +237,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 else:
                     posts = Post.select()
             except Exception as e:
-                logging.warning(e)
+                logging.exception(e)
             else:
                 for post in posts:
                     a += 1
@@ -255,7 +256,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                                    str(post.author.username) + \
                                    ' - ' + str('Posted' if post.status else 'Not posted') + '\n'
 
-                    if a % 10 == 0:
+                    if a % 20 == 0:
                         await bot.send_message(
                             message.chat.id,
                             result_text,
@@ -272,10 +273,10 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
 
             await bot.send_message(message.chat.id, result_text, reply_markup=user_markup, entities=entity_list)
 
-        elif message.text == 'Добавить новый пост':
+        elif message.text == Menu.MenuPosts.add_new_post:
             await bot.delete_message(message.chat.id, message.message_id)
             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-            user_markup.row(main_menu)
+            user_markup.row(Menu.main_menu)
 
             with open(files.example_text, encoding='utf-8') as example_text:
                 example_text = example_text.read()
@@ -361,7 +362,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
             await bot.send_message(message.chat.id, 'Введите тему поста', reply_markup=user_markup)
             set_state(message.chat.id, 1)
 
-        elif message.text == 'Размещение постов':
+        elif message.text == Menu.MenuPosts.posting:
             await bot.delete_message(message.chat.id, message.message_id)
 
             try:
@@ -382,12 +383,12 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 if a == 0:
                     await bot.send_message(message.chat.id, 'Не размещенных постов нет!', reply_markup=user_markup)
                 else:
-                    user_markup.row(main_menu)
+                    user_markup.row(Menu.main_menu)
                     await bot.send_message(message.chat.id, 'Какой пост хотите разместить?',
                                            parse_mode='Markdown', reply_markup=user_markup)
                     set_state(message.chat.id, 90)
 
-        elif message.text == 'Редактирование постов':
+        elif message.text == Menu.MenuPosts.edit_post:
             await bot.delete_message(message.chat.id, message.message_id)
 
             try:
@@ -406,26 +407,26 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 if a == 0:
                     await bot.send_message(message.chat.id, 'Никаких постов ещё не создано!', reply_markup=user_markup)
                 else:
-                    user_markup.row(main_menu)
+                    user_markup.row(Menu.main_menu)
                     await bot.send_message(message.chat.id, 'Какой пост хотите редактировать?',
                                            parse_mode='Markdown', reply_markup=user_markup)
                     set_state(message.chat.id, 12)
 
-        elif message.text == 'Назад':
+        elif message.text == Menu.back:
             await bot.delete_message(message.chat.id, message.message_id)
             if get_state(message.chat.id) in [14, 15, 16, 17, 18, 19, 20, 21, 22]:
                 user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                user_markup.row('Изменить тему', 'Изменить описание')
-                user_markup.row('Изменить дату', 'Изменить требования')
-                user_markup.row('Изменить сайт проекта')
-                user_markup.row('Изменить твиттер', 'Изменить дискорд')
-                user_markup.row('Изменить баннер', 'Изменить хэштеги')
-                user_markup.row(main_menu)
+                user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+                user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+                user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+                user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+                user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+                user_markup.row(Menu.main_menu)
                 await bot.send_message(message.chat.id, 'Теперь выберите, что хотите изменить',
                                        reply_markup=user_markup)
                 set_state(message.chat.id, 13)
             elif get_state(message.chat.id) in [140, 150, 160, 170, 180, 190, 200, 210, 220]:
-                edition_post = get_chat_value_message(message)
+                edition_post = get_chat_value_message(message.chat.id)
 
                 if await preview(bot, message, edition_post, settings):
                     key = InlineKeyboardMarkup()
@@ -436,26 +437,26 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                     await bot.send_message(message.chat.id, 'Хотите ли редактировать пост?', reply_markup=key)
                 else:
                     user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                    user_markup.row('Изменить тему', 'Изменить описание')
-                    user_markup.row('Изменить дату', 'Изменить требования')
-                    user_markup.row('Изменить сайт проекта')
-                    user_markup.row('Изменить твиттер', 'Изменить дискорд')
-                    user_markup.row('Изменить баннер', 'Изменить хэштеги')
-                    user_markup.row(main_menu)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+                    user_markup.row(Menu.main_menu)
                     await bot.send_message(message.chat.id, 'Теперь выберите, что хотите изменить',
                                            reply_markup=user_markup)
                     set_state(message.chat.id, 130)
 
-        elif message.text == 'Изменить тему':
+        elif message.text == Menu.MenuPosts.EditMenu.edit_name:
             await bot.delete_message(message.chat.id, message.message_id)
             if get_state(message.chat.id) in [13, 130]:
-                edition_post = get_chat_value_message(message)
+                edition_post = get_chat_value_message(message.chat.id)
                 post_for_edit = Post.get_or_none(post_name=str(edition_post['post_name']))
 
                 if post_for_edit is not None:
                     user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                    user_markup.row('Назад')
-                    user_markup.row(main_menu)
+                    user_markup.row(Menu.back)
+                    user_markup.row(Menu.main_menu)
                     await bot.send_message(message.chat.id, 'Введите новую тему поста',
                                            parse_mode='Markdown', reply_markup=user_markup)
                     if get_state(message.chat.id) == 13:
@@ -465,16 +466,16 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 else:
                     await bot.send_message(message.chat.id, 'Поста с такой темой нет!\nВыберите заново!')
 
-        elif message.text == 'Изменить описание':
+        elif message.text == Menu.MenuPosts.EditMenu.edit_desc:
             await bot.delete_message(message.chat.id, message.message_id)
             if get_state(message.chat.id) in [13, 130]:
-                edition_post = get_chat_value_message(message)
+                edition_post = get_chat_value_message(message.chat.id)
                 post_for_edit = Post.get_or_none(post_name=str(edition_post['post_name']))
 
                 if post_for_edit is not None:
                     user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                    user_markup.row('Назад')
-                    user_markup.row(main_menu)
+                    user_markup.row(Menu.back)
+                    user_markup.row(Menu.main_menu)
                     await bot.send_message(message.chat.id, 'Введите новое описание поста',
                                            parse_mode='Markdown', reply_markup=user_markup)
                     if get_state(message.chat.id) == 13:
@@ -484,16 +485,16 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 else:
                     await bot.send_message(message.chat.id, 'Поста с таким описанием нет!\nВыберите заново!')
 
-        elif message.text == 'Изменить дату':
+        elif message.text == Menu.MenuPosts.EditMenu.edit_date:
             await bot.delete_message(message.chat.id, message.message_id)
             if get_state(message.chat.id) in [13, 130]:
-                edition_post = get_chat_value_message(message)
+                edition_post = get_chat_value_message(message.chat.id)
                 post_for_edit = Post.get_or_none(post_name=str(edition_post['post_name']))
 
                 if post_for_edit is not None:
                     user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                    user_markup.row('Назад')
-                    user_markup.row(main_menu)
+                    user_markup.row(Menu.back)
+                    user_markup.row(Menu.main_menu)
                     await bot.send_message(message.chat.id, 'Введите новую дату поста '
                                                             'или введите /empty, чтобы удалить содержимое',
                                            parse_mode='Markdown', reply_markup=user_markup)
@@ -504,16 +505,16 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 else:
                     await bot.send_message(message.chat.id, 'Поста с такой датой нет!\nВыберите заново!')
 
-        elif message.text == 'Изменить требования':
+        elif message.text == Menu.MenuPosts.EditMenu.edit_needs:
             await bot.delete_message(message.chat.id, message.message_id)
             if get_state(message.chat.id) in [13, 130]:
-                edition_post = get_chat_value_message(message)
+                edition_post = get_chat_value_message(message.chat.id)
                 post_for_edit = Post.get_or_none(post_name=str(edition_post['post_name']))
 
                 if post_for_edit is not None:
                     user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                    user_markup.row('Назад')
-                    user_markup.row(main_menu)
+                    user_markup.row(Menu.back)
+                    user_markup.row(Menu.main_menu)
                     await bot.send_message(message.chat.id, 'Введите что нужно сделать для участия '
                                                             'или введите /empty, чтобы удалить содержимое',
                                            parse_mode='Markdown', reply_markup=user_markup)
@@ -524,16 +525,16 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 else:
                     await bot.send_message(message.chat.id, 'Поста с такими требованиями нет!\nВыберите заново!')
 
-        elif message.text == 'Изменить сайт проекта':
+        elif message.text == Menu.MenuPosts.EditMenu.edit_site:
             await bot.delete_message(message.chat.id, message.message_id)
             if get_state(message.chat.id) in [13, 130]:
-                edition_post = get_chat_value_message(message)
+                edition_post = get_chat_value_message(message.chat.id)
                 post_for_edit = Post.get_or_none(post_name=str(edition_post['post_name']))
 
                 if post_for_edit is not None:
                     user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                    user_markup.row('Назад')
-                    user_markup.row(main_menu)
+                    user_markup.row(Menu.back)
+                    user_markup.row(Menu.main_menu)
                     await bot.send_message(message.chat.id, 'Введите новый сайт проекта '
                                                             'или введите /empty, чтобы удалить содержимое',
                                            parse_mode='Markdown', reply_markup=user_markup)
@@ -544,16 +545,16 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 else:
                     await bot.send_message(message.chat.id, 'Поста с такими сайтом нет!\nВыберите заново!')
 
-        elif message.text == 'Изменить твиттер':
+        elif message.text == Menu.MenuPosts.EditMenu.edit_twitter:
             await bot.delete_message(message.chat.id, message.message_id)
             if get_state(message.chat.id) in [13, 130]:
-                edition_post = get_chat_value_message(message)
+                edition_post = get_chat_value_message(message.chat.id)
                 post_for_edit = Post.get_or_none(post_name=str(edition_post['post_name']))
 
                 if post_for_edit is not None:
                     user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                    user_markup.row('Назад')
-                    user_markup.row(main_menu)
+                    user_markup.row(Menu.back)
+                    user_markup.row(Menu.main_menu)
                     await bot.send_message(message.chat.id, 'Введите новый твиттер проекта '
                                                             'или введите /empty, чтобы удалить содержимое',
                                            parse_mode='Markdown', reply_markup=user_markup)
@@ -564,16 +565,16 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 else:
                     await bot.send_message(message.chat.id, 'Поста с такими твиттером нет!\nВыберите заново!')
 
-        elif message.text == 'Изменить дискорд':
+        elif message.text == Menu.MenuPosts.EditMenu.edit_discord:
             await bot.delete_message(message.chat.id, message.message_id)
             if get_state(message.chat.id) in [13, 130]:
-                edition_post = get_chat_value_message(message)
+                edition_post = get_chat_value_message(message.chat.id)
                 post_for_edit = Post.get_or_none(post_name=str(edition_post['post_name']))
 
                 if post_for_edit is not None:
                     user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                    user_markup.row('Назад')
-                    user_markup.row(main_menu)
+                    user_markup.row(Menu.back)
+                    user_markup.row(Menu.main_menu)
                     await bot.send_message(message.chat.id, 'Введите новый дискорд проекта '
                                                             'или введите /empty, чтобы удалить содержимое',
                                            parse_mode='Markdown', reply_markup=user_markup)
@@ -584,16 +585,16 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 else:
                     await bot.send_message(message.chat.id, 'Поста с такими дискордом нет!\nВыберите заново!')
 
-        elif message.text == 'Изменить баннер':
+        elif message.text == Menu.MenuPosts.EditMenu.edit_banner:
             await bot.delete_message(message.chat.id, message.message_id)
             if get_state(message.chat.id) in [13, 130]:
-                edition_post = get_chat_value_message(message)
+                edition_post = get_chat_value_message(message.chat.id)
                 post_for_edit = Post.get_or_none(post_name=str(edition_post['post_name']))
 
                 if post_for_edit is not None:
                     user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                    user_markup.row('Назад')
-                    user_markup.row(main_menu)
+                    user_markup.row(Menu.back)
+                    user_markup.row(Menu.main_menu)
                     await bot.send_message(message.chat.id, 'Вставьте баннер (изображение) поста.'
                                                             'Или если нет баннера, то пропишите /empty',
                                            parse_mode='Markdown', reply_markup=user_markup)
@@ -604,16 +605,16 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 else:
                     await bot.send_message(message.chat.id, 'Поста с таким баннером нет!\nВыберите заново!')
 
-        elif message.text == 'Изменить хэштеги':
+        elif message.text == Menu.MenuPosts.EditMenu.edit_hashtags:
             await bot.delete_message(message.chat.id, message.message_id)
             if get_state(message.chat.id) in [13, 130]:
-                edition_post = get_chat_value_message(message)
+                edition_post = get_chat_value_message(message.chat.id)
                 post_for_edit = Post.get_or_none(post_name=str(edition_post['post_name']))
 
                 if post_for_edit is not None:
                     user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                    user_markup.row('Назад')
-                    user_markup.row(main_menu)
+                    user_markup.row(Menu.back)
+                    user_markup.row(Menu.main_menu)
                     await bot.send_message(message.chat.id, 'Введите новые хэштеги',
                                            parse_mode='Markdown', reply_markup=user_markup)
                     if get_state(message.chat.id) == 13:
@@ -623,7 +624,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 else:
                     await bot.send_message(message.chat.id, 'Поста с такими хэштегами нет!\nВыберите заново!')
 
-        elif message.text == 'Удалить пост':
+        elif message.text == Menu.MenuPosts.delete_post:
             await bot.delete_message(message.chat.id, message.message_id)
 
             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
@@ -642,26 +643,26 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 if a == 0:
                     await bot.send_message(message.chat.id, 'Никаких постов ещё не создано!', reply_markup=user_markup)
                 else:
-                    user_markup.row(main_menu)
+                    user_markup.row(Menu.main_menu)
                     await bot.send_message(message.chat.id, 'Какой пост нужно удалить?',
                                            parse_mode='Markdown', reply_markup=user_markup)
                     set_state(message.chat.id, 11)
 
-        elif message.text == 'Списки':
+        elif message.text == Menu.lists:
             await bot.delete_message(message.chat.id, message.message_id)
             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-            user_markup.row('Список авторов', 'Удалённые авторы')
-            user_markup.row('Список модераторов', 'Список админов')
-            user_markup.row(main_menu)
+            user_markup.row(Menu.ListsMenu.authors_list, Menu.ListsMenu.blocked_authors_lists)
+            user_markup.row(Menu.ListsMenu.moders_lists, Menu.ListsMenu.admins_lists)
+            user_markup.row(Menu.main_menu)
 
             await bot.send_message(message.chat.id, "Выберите список для отображения", reply_markup=user_markup)
 
-        elif message.text == 'Список авторов':
+        elif message.text == Menu.ListsMenu.authors_list:
             await bot.delete_message(message.chat.id, message.message_id)
             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
             if isinstance(current_user, Admin):
-                user_markup.row('Добавить нового автора', 'Удалить автора')
-            user_markup.row(main_menu)
+                user_markup.row(Menu.ListsMenu.AuthorMenu.add_new, Menu.ListsMenu.AuthorMenu.delete)
+            user_markup.row(Menu.main_menu)
             a = 0
 
             authors = "Список авторов:\n\n"
@@ -678,7 +679,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
             else:
                 await bot.send_message(message.chat.id, "Авторов еще нет", reply_markup=user_markup)
 
-        elif message.text == 'Добавить нового автора':
+        elif message.text == Menu.ListsMenu.AuthorMenu.add_new:
             if isinstance(current_user, Admin):
                 await bot.delete_message(message.chat.id, message.message_id)
                 key = InlineKeyboardMarkup()
@@ -691,7 +692,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 await bot.send_message(message.chat.id,
                                        "У вас нет прав на выполнение данного действия")
 
-        elif message.text == 'Удалить автора':
+        elif message.text == Menu.ListsMenu.AuthorMenu.delete:
             if isinstance(current_user, Admin):
                 await bot.delete_message(message.chat.id, message.message_id)
                 user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
@@ -702,7 +703,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 if a == 0:
                     await bot.send_message(message.chat.id, 'Вы ещё не добавляли авторов!')
                 else:
-                    user_markup.row(main_menu)
+                    user_markup.row(Menu.main_menu)
                     await bot.send_message(message.chat.id, 'Выбери автора, которого нужно удалить',
                                            reply_markup=user_markup)
                     set_state(message.chat.id, 32)
@@ -710,10 +711,10 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 await bot.send_message(message.chat.id,
                                        "У вас нет прав на выполнение данного действия")
 
-        elif message.text == 'Удалённые авторы':
+        elif message.text == Menu.ListsMenu.blocked_authors_lists:
             await bot.delete_message(message.chat.id, message.message_id)
             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-            user_markup.row(main_menu)
+            user_markup.row(Menu.main_menu)
             a = 0
 
             authors = "Удалённые авторы:\n\n"
@@ -730,12 +731,12 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
             else:
                 await bot.send_message(message.chat.id, "Удалённых авторов еще нет", reply_markup=user_markup)
 
-        elif message.text == 'Список админов':
+        elif message.text == Menu.ListsMenu.admins_lists:
             await bot.delete_message(message.chat.id, message.message_id)
             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
             if isinstance(current_user, Admin):
-                user_markup.row('Добавить нового админа', 'Удалить админа')
-            user_markup.row(main_menu)
+                user_markup.row(Menu.ListsMenu.AdminMenu.add_new, Menu.ListsMenu.AdminMenu.delete)
+            user_markup.row(Menu.main_menu)
             a = 0
 
             admins = "Список админов:\n\n"
@@ -752,7 +753,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
             else:
                 await bot.send_message(message.chat.id, "Админов еще нет", reply_markup=user_markup)
 
-        elif message.text == 'Добавить нового админа':
+        elif message.text == Menu.ListsMenu.AdminMenu.add_new:
             if isinstance(current_user, Admin) and current_user.permissions == 'admin_permissions':
                 await bot.delete_message(message.chat.id, message.message_id)
                 key = InlineKeyboardMarkup()
@@ -765,18 +766,18 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 await bot.send_message(message.chat.id,
                                        "У вас нет прав на выполнение данного действия")
 
-        elif message.text == 'Удалить админа':
+        elif message.text == Menu.ListsMenu.AdminMenu.delete:
             if isinstance(current_user, Admin) and current_user.permissions == 'admin_permissions':
                 await bot.delete_message(message.chat.id, message.message_id)
                 user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
                 a = 0
                 for admin in get_admin_list():
                     a += 1
-                    if int(admin[0]) != admin_id: user_markup.row(f"{str(admin[0])} - {admin[1]}")
+                    if int(admin[0]) != SUPER_ADMIN_ID: user_markup.row(f"{str(admin[0])} - {admin[1]}")
                 if a == 0:
                     await bot.send_message(message.chat.id, 'Вы ещё не добавляли админов!')
                 else:
-                    user_markup.row(main_menu)
+                    user_markup.row(Menu.main_menu)
                     await bot.send_message(message.chat.id, 'Выбери админа, которого нужно удалить',
                                            reply_markup=user_markup)
                     set_state(message.chat.id, 42)
@@ -784,12 +785,12 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 await bot.send_message(message.chat.id,
                                        "У вас нет прав на выполнение данного действия")
 
-        elif message.text == 'Список модераторов':
+        elif message.text == Menu.ListsMenu.moders_lists:
             await bot.delete_message(message.chat.id, message.message_id)
             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
             if isinstance(current_user, Admin):
-                user_markup.row('Добавить нового модератора', 'Удалить модератора')
-            user_markup.row(main_menu)
+                user_markup.row(Menu.ListsMenu.ModerMenu.add_new, Menu.ListsMenu.ModerMenu.delete)
+            user_markup.row(Menu.main_menu)
             a = 0
 
             moders = "Список модераторов:\n\n"
@@ -806,7 +807,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
             else:
                 await bot.send_message(message.chat.id, "Модераторов еще нет", reply_markup=user_markup)
 
-        elif message.text == 'Добавить нового модератора':
+        elif message.text == Menu.ListsMenu.ModerMenu.add_new:
             if isinstance(current_user, Admin):
                 await bot.delete_message(message.chat.id, message.message_id)
                 key = InlineKeyboardMarkup()
@@ -819,7 +820,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 await bot.send_message(message.chat.id,
                                        "У вас нет прав на выполнение данного действия")
 
-        elif message.text == 'Удалить модератора':
+        elif message.text == Menu.ListsMenu.ModerMenu.delete:
             if isinstance(current_user, Admin):
                 await bot.delete_message(message.chat.id, message.message_id)
                 user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
@@ -830,7 +831,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 if a == 0:
                     await bot.send_message(message.chat.id, 'Вы ещё не добавляли модераторов!')
                 else:
-                    user_markup.row(main_menu)
+                    user_markup.row(Menu.main_menu)
                     await bot.send_message(message.chat.id, 'Выбери id модератора, которого нужно удалить',
                                            reply_markup=user_markup)
                     set_state(message.chat.id, 52)
@@ -838,31 +839,23 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 await bot.send_message(message.chat.id,
                                        "У вас нет прав на выполнение данного действия")
 
-        elif message.text == 'Скачать лог файл':
-            if isinstance(current_user, Admin) and current_user.permissions == 'admin_permissions':
-                await bot.delete_message(message.chat.id, message.message_id)
-                with open(files.working_log, 'rb') as working_log:
-                    await bot.send_document(message.chat.id, working_log)
-                with open(files.system_log, 'rb') as system_log:
-                    await bot.send_document(message.chat.id, system_log)
-            else:
-                await bot.send_message(message.chat.id,
-                                       "У вас нет прав на выполнение данного действия")
-
-        elif message.text == 'Настройки бота':
+        elif message.text == Menu.settings:
             if isinstance(current_user, Admin) and current_user.permissions == 'admin_permissions':
                 await bot.delete_message(message.chat.id, message.message_id)
                 user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
 
-                user_markup.row(f'Часовой пояс: {settings.time_zone}')
-                user_markup.row(f'Название канала: {settings.channel_name}')
-                user_markup.row(f'Порог опыта авторам: {settings.threshold_xp}')
-                user_markup.row('Изменить выводное сообщение команды /help')
-                user_markup.row('Изменить нижнюю подпись для постов')
-                user_markup.row('Скачать лог файл')
-                user_markup.row('Скачать резервную копию БД')
-                user_markup.row('Создать резервную копию БД')
-                user_markup.row(main_menu)
+                user_markup.row(Menu.Settings.time_zone_text + str(settings.time_zone))
+                user_markup.row(Menu.Settings.channel_name_text + str(settings.channel_name))
+                user_markup.row(Menu.Settings.threshold_xp_text + str(settings.threshold_xp))
+                user_markup.row(Menu.Settings.help_edit_text)
+                user_markup.row(Menu.Settings.footer_edit_text)
+                user_markup.row(Menu.Settings.log_files_download_text)
+                user_markup.row(Menu.Settings.copy_db_download_text)
+                user_markup.row(Menu.Settings.create_copy_db_text)
+                user_markup.row(Menu.Settings.restore_db_text)
+                user_markup.row(Menu.Settings.check_emoji_text)
+                user_markup.row(Menu.Settings.bad_emoji_text)
+                user_markup.row(Menu.main_menu)
 
                 await bot.send_message(message.chat.id, "Вы вошли в настройки бота", reply_markup=user_markup,
                                        parse_mode="HTML")
@@ -870,11 +863,11 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 await bot.send_message(message.chat.id,
                                        "У вас нет прав на выполнение данного действия")
 
-        elif message.text == 'Изменить выводное сообщение команды /help':
+        elif message.text == Menu.Settings.help_edit_text:
             if isinstance(current_user, Admin) and current_user.permissions == 'admin_permissions':
                 await bot.delete_message(message.chat.id, message.message_id)
                 user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                user_markup.row(main_menu)
+                user_markup.row(Menu.main_menu)
                 help_entities = []
 
                 help_text = settings.help_text
@@ -906,11 +899,11 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 await bot.send_message(message.chat.id,
                                        "У вас нет прав на выполнение данного действия")
 
-        elif message.text == 'Изменить нижнюю подпись для постов':
+        elif message.text == Menu.Settings.footer_edit_text:
             if isinstance(current_user, Admin) and current_user.permissions == 'admin_permissions':
                 await bot.delete_message(message.chat.id, message.message_id)
                 user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                user_markup.row(main_menu)
+                user_markup.row(Menu.main_menu)
                 footer_entities = []
 
                 footer_text = settings.footer_text
@@ -942,11 +935,11 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 await bot.send_message(message.chat.id,
                                        "У вас нет прав на выполнение данного действия")
 
-        elif isinstance(message.text, str) and 'Порог опыта авторам:' in message.text:
+        elif isinstance(message.text, str) and Menu.Settings.threshold_xp_text in message.text:
             if isinstance(current_user, Admin) and current_user.permissions == 'admin_permissions':
                 user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
 
-                user_markup.row(main_menu)
+                user_markup.row(Menu.main_menu)
 
                 await bot.send_message(message.chat.id, "Введите новый порог для авторов"
                                                         " (только число)", reply_markup=user_markup)
@@ -955,7 +948,18 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 await bot.send_message(message.chat.id,
                                        "У вас нет прав на выполнение данного действия")
 
-        elif message.text == 'Скачать резервную копию БД':
+        elif message.text == Menu.Settings.log_files_download_text:
+            if isinstance(current_user, Admin) and current_user.permissions == 'admin_permissions':
+                await bot.delete_message(message.chat.id, message.message_id)
+                with open(files.working_log, 'rb') as working_log:
+                    await bot.send_document(message.chat.id, working_log)
+                with open(files.system_log, 'rb') as system_log:
+                    await bot.send_document(message.chat.id, system_log)
+            else:
+                await bot.send_message(message.chat.id,
+                                       "У вас нет прав на выполнение данного действия")
+
+        elif message.text == Menu.Settings.copy_db_download_text:
             if isinstance(current_user, Admin) and current_user.permissions == 'admin_permissions':
                 await bot.delete_message(message.chat.id, message.message_id)
                 try:
@@ -968,7 +972,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 await bot.send_message(message.chat.id,
                                        "У вас нет прав на выполнение данного действия")
 
-        elif message.text == 'Создать резервную копию БД':
+        elif message.text == Menu.Settings.create_copy_db_text:
             if isinstance(current_user, Admin) and current_user.permissions == 'admin_permissions':
                 await bot.delete_message(message.chat.id, message.message_id)
                 try:
@@ -984,16 +988,63 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
             else:
                 await bot.send_message(message.chat.id,
                                        "У вас нет прав на выполнение данного действия")
+        elif message.text == Menu.Settings.restore_db_text:
+            if isinstance(current_user, Admin) and current_user.permissions == 'admin_permissions':
+                await bot.delete_message(message.chat.id, message.message_id)
+                user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
+
+                dir_name = os.path.join(os.path.dirname(__file__), 'data\\db\\reserve')
+                db_reserve_list = os.listdir(dir_name)
+                for copy in db_reserve_list:
+                    user_markup.row(copy)
+                user_markup.row(Menu.main_menu)
+
+                await bot.send_message(message.chat.id,
+                                       "Выберите копию для восстановления", reply_markup=user_markup)
+                set_state(message.chat.id, 65)
+            else:
+                await bot.send_message(message.chat.id,
+                                       "У вас нет прав на выполнение данного действия")
+
+        elif message.text == Menu.Settings.bad_emoji_text:
+            if isinstance(current_user, Admin) and current_user.permissions == 'admin_permissions':
+                await bot.delete_message(message.chat.id, message.message_id)
+
+                user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
+                user_markup.row(Menu.main_menu)
+
+                await bot.send_message(message.chat.id, "Вставьте эмоджи, "
+                                                        "который смещает форматирование текста",
+                                       reply_markup=user_markup)
+                set_state(message.chat.id, 71)
+            else:
+                await bot.send_message(message.chat.id,
+                                       "У вас нет прав на выполнение данного действия")
+
+        elif message.text == Menu.Settings.check_emoji_text:
+            if isinstance(current_user, Admin) and current_user.permissions == 'admin_permissions':
+                await bot.delete_message(message.chat.id, message.message_id)
+
+                user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
+                user_markup.row(Menu.main_menu)
+
+                await bot.send_message(message.chat.id, "Вставьте эмоджи, "
+                                                        "который хотите проверить",
+                                       reply_markup=user_markup)
+                set_state(message.chat.id, 70)
+            else:
+                await bot.send_message(message.chat.id,
+                                       "У вас нет прав на выполнение данного действия")
 
         elif get_state(message.chat.id) == 1:
             set_chat_value_message(message, 1)
 
             instance = Post.get_or_none(Post.post_name == message.text)
             if instance is None:
-                creation_post = get_chat_value_message(message)
+                creation_post = get_chat_value_message(message.chat.id)
 
                 user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                user_markup.row(main_menu)
+                user_markup.row(Menu.main_menu)
                 await bot.send_message(message.chat.id, f"Тема поста: {str(creation_post['post_name'])}",
                                        reply_markup=user_markup)
 
@@ -1094,7 +1145,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 file_info = await bot.get_file(message.document.file_id)
                 downloaded_file = await bot.download_file(file_info.file_path)
 
-                creation_post = get_chat_value_message(message)
+                creation_post = get_chat_value_message(message.chat.id)
 
                 src = f"data/media/posts_media/pic for post - {creation_post['post_name']}.jpeg"
                 with open(src, 'wb') as new_file:
@@ -1106,7 +1157,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 file_info = await bot.get_file(message.photo[-1].file_id)
                 downloaded_file = await bot.download_file(file_info.file_path)
 
-                creation_post = get_chat_value_message(message)
+                creation_post = get_chat_value_message(message.chat.id)
 
                 src = f"data/media/posts_media/pic for post - {creation_post['post_name']}.jpeg"
                 with open(src, 'wb') as new_file:
@@ -1126,7 +1177,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
             if '#' in message.text:
                 set_chat_value_message(message, 9)
 
-                creation_post = get_chat_value_message(message)
+                creation_post = get_chat_value_message(message.chat.id)
 
                 author = User.get_or_none(user_id=creation_post['author_id'])
 
@@ -1151,7 +1202,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 except Exception as e:
                     logging.warning(e)
                 else:
-                    await log(f"Post {str(creation_post['post_name'])} is created by {message.chat.id}")
+                    await log(settings, f"Post {str(creation_post['post_name'])} is created by {message.chat.id}")
 
                     await bot.send_message(message.chat.id, 'Пост был сохранён в базу данных.')
 
@@ -1164,12 +1215,12 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                         await bot.send_message(message.chat.id, 'Хотите ли редактировать пост?', reply_markup=key)
                     else:
                         user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                        user_markup.row('Изменить тему', 'Изменить описание')
-                        user_markup.row('Изменить дату', 'Изменить требования')
-                        user_markup.row('Изменить сайт проекта')
-                        user_markup.row('Изменить твиттер', 'Изменить дискорд')
-                        user_markup.row('Изменить баннер', 'Изменить хэштеги')
-                        user_markup.row(main_menu)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+                        user_markup.row(Menu.main_menu)
                         await bot.send_message(message.chat.id, 'Теперь выберите, что хотите изменить',
                                                reply_markup=user_markup)
                         set_state(message.chat.id, 130)
@@ -1180,7 +1231,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
 
         elif get_state(message.chat.id) == 10:
             if message.text.lower() == 'да':
-                creation_post = get_chat_value_message(message)
+                creation_post = get_chat_value_message(message.chat.id)
                 entity_list = []
                 text = f"{creation_post['post_name']}\n\n" \
                        f"{creation_post['post_desc']}\n\n"
@@ -1317,7 +1368,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                         except Exception as e:
                             logging.warning(e)
                         else:
-                            await log(f"Post {str(creation_post['post_name'])} is posted by {message.chat.id}")
+                            await log(settings, f"Post {str(creation_post['post_name'])} is posted by {message.chat.id}")
 
                             post = Post.get(Post.post_name == str(creation_post['post_name']))
                             post.message_id = message_result.message_id
@@ -1338,7 +1389,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                         except Exception as e:
                             logging.warning(e)
                         else:
-                            await log(f"Post {str(creation_post['post_name'])} is posted by {message.chat.id}")
+                            await log(settings, f"Post {str(creation_post['post_name'])} is posted by {message.chat.id}")
 
                             post = Post.get(Post.post_name == str(creation_post['post_name']))
                             post.message_id = message_result.message_id
@@ -1358,7 +1409,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                         except Exception as e:
                             logging.warning(e)
                         else:
-                            await log(f"Post {str(creation_post['post_name'])} is posted by {message.chat.id}")
+                            await log(settings, f"Post {str(creation_post['post_name'])} is posted by {message.chat.id}")
 
                             post = Post.get(Post.post_name == str(creation_post['post_name']))
                             post.message_id = message_result.message_id
@@ -1379,7 +1430,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                         except Exception as e:
                             logging.warning(e)
                         else:
-                            await log(f"Post {str(creation_post['post_name'])} is posted by {message.chat.id}")
+                            await log(settings, f"Post {str(creation_post['post_name'])} is posted by {message.chat.id}")
 
                             post = Post.get(Post.post_name == str(creation_post['post_name']))
                             post.message_id = message_result.message_id
@@ -1394,27 +1445,27 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                                 logging.warning(e)
 
                 user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                user_markup.row('Посты')
-                user_markup.row('Списки')
+                user_markup.row(Menu.posts)
+                user_markup.row(Menu.lists)
                 if isinstance(current_user, Admin) and current_user.permissions == 'admin_permissions':
-                    user_markup.row('Настройки бота')
+                    user_markup.row(Menu.settings)
 
                 await bot.send_message(message.chat.id, 'Пост был создан и размещен на канале.',
                                        reply_markup=user_markup)
 
-                delete_chat_value_message(message)
+                delete_chat_value_message(message.chat.id)
                 delete_state(message.chat.id)
             else:
                 user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                user_markup.row('Посты')
-                user_markup.row('Списки')
+                user_markup.row(Menu.posts)
+                user_markup.row(Menu.lists)
                 if isinstance(current_user, Admin) and current_user.permissions == 'admin_permissions':
-                    user_markup.row('Настройки бота')
+                    user_markup.row(Menu.settings)
 
                 await bot.send_message(message.chat.id, "Вы не написали 'Да', поэтому Пост не был размещён.",
                                        reply_markup=user_markup)
 
-                delete_chat_value_message(message)
+                delete_chat_value_message(message.chat.id)
                 delete_state(message.chat.id)
 
         elif get_state(message.chat.id) == 90:
@@ -1442,16 +1493,16 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                         'status': post_for_pos.status
                     }
 
-                unposted_post = get_chat_value_message(message)
+                unposted_post = get_chat_value_message(message.chat.id)
 
                 if not await preview(bot, message, unposted_post, settings):
                     user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                    user_markup.row('Изменить тему', 'Изменить описание')
-                    user_markup.row('Изменить дату', 'Изменить требования')
-                    user_markup.row('Изменить сайт проекта')
-                    user_markup.row('Изменить твиттер', 'Изменить дискорд')
-                    user_markup.row('Изменить баннер', 'Изменить хэштеги')
-                    user_markup.row(main_menu)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+                    user_markup.row(Menu.main_menu)
                     await bot.send_message(message.chat.id, 'Не удаётся отобразить предпросмотр. '
                                                             'Выберите, что хотите изменить',
                                            reply_markup=user_markup)
@@ -1466,6 +1517,10 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
 
         elif get_state(message.chat.id) == 11:
             post_for_del = Post.get_or_none(Post.post_name == message.text)
+            user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
+            user_markup.row(Menu.MenuPosts.add_new_post, Menu.MenuPosts.delete_post)
+            user_markup.row(Menu.MenuPosts.edit_post, Menu.MenuPosts.posting)
+            user_markup.row(Menu.main_menu)
 
             if post_for_del is not None:
                 try:
@@ -1474,14 +1529,11 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                     await bot.send_message(message.chat.id, 'Пост не может быть удалён из канала: '
                                                             'он не был там размещён!')
                 else:
-                    post_for_del.delete_instance()
-
-                    user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                    user_markup.row('Добавить новый пост', 'Удалить пост')
-                    user_markup.row('Редактирование постов', 'Размещение постов')
-                    user_markup.row(main_menu)
+                    await bot.send_message(message.chat.id, 'Пост успешно удален из канала!', reply_markup=user_markup)
+                finally:
                     await bot.send_message(message.chat.id, 'Пост успешно удален!', reply_markup=user_markup)
-                    await log(f'Post {message.text} is deleted by {message.chat.id}')
+                    await log(settings, f'Post {message.text} is deleted by {message.chat.id}')
+                    post_for_del.delete_instance()
                     delete_state(message.chat.id)
             else:
                 await bot.send_message(message.chat.id,
@@ -1510,16 +1562,16 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                         'status': post_for_edit.status
                     }
 
-                edition_post = get_chat_value_message(message)
+                edition_post = get_chat_value_message(message.chat.id)
                 await preview(bot, message, edition_post, settings)
 
                 user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                user_markup.row('Изменить тему', 'Изменить описание')
-                user_markup.row('Изменить дату', 'Изменить требования')
-                user_markup.row('Изменить сайт проекта')
-                user_markup.row('Изменить твиттер', 'Изменить дискорд')
-                user_markup.row('Изменить баннер', 'Изменить хэштеги')
-                user_markup.row(main_menu)
+                user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+                user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+                user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+                user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+                user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+                user_markup.row(Menu.main_menu)
                 await bot.send_message(message.chat.id, 'Теперь выберите, что хотите изменить',
                                        reply_markup=user_markup)
                 set_state(message.chat.id, 13)
@@ -1527,7 +1579,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 await bot.send_message(message.chat.id, 'Поста с таким названием нет!\nВыберите заново!')
 
         elif get_state(message.chat.id) in [14, 140]:
-            edition_post = get_chat_value_message(message)
+            edition_post = get_chat_value_message(message.chat.id)
 
             post_for_edit = Post.get_or_none(post_name=str(edition_post['post_name']))
             if post_for_edit is not None:
@@ -1558,20 +1610,20 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                             'message_id': edited_post.message_id
                         }
 
-                    edition_post = get_chat_value_message(message)
+                    edition_post = get_chat_value_message(message.chat.id)
 
                     if edition_post['status']:
                         await edit_post(bot, message, edition_post, settings, False)
 
                     user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                    user_markup.row('Изменить тему', 'Изменить описание')
-                    user_markup.row('Изменить дату', 'Изменить требования')
-                    user_markup.row('Изменить сайт проекта')
-                    user_markup.row('Изменить твиттер', 'Изменить дискорд')
-                    user_markup.row('Изменить баннер', 'Изменить хэштеги')
-                    user_markup.row(main_menu)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+                    user_markup.row(Menu.main_menu)
                     await bot.send_message(message.chat.id, 'Тема поста успешно изменена!', reply_markup=user_markup)
-                    await log(f"Name post {edition_post['post_name']} is changed by {message.chat.id}")
+                    await log(settings, f"Name post {edition_post['post_name']} is changed by {message.chat.id}")
                     set_state(message.chat.id, 13)
 
                 elif get_state(message.chat.id) == 140:
@@ -1597,7 +1649,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                             'message_id': edited_post.message_id
                         }
 
-                    edition_post = get_chat_value_message(message)
+                    edition_post = get_chat_value_message(message.chat.id)
 
                     if await preview(bot, message, edition_post, settings):
                         key = InlineKeyboardMarkup()
@@ -1608,12 +1660,12 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                         await bot.send_message(message.chat.id, 'Хотите ли редактировать пост?', reply_markup=key)
                     else:
                         user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                        user_markup.row('Изменить тему', 'Изменить описание')
-                        user_markup.row('Изменить дату', 'Изменить требования')
-                        user_markup.row('Изменить сайт проекта')
-                        user_markup.row('Изменить твиттер', 'Изменить дискорд')
-                        user_markup.row('Изменить баннер', 'Изменить хэштеги')
-                        user_markup.row(main_menu)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+                        user_markup.row(Menu.main_menu)
                         await bot.send_message(message.chat.id, 'Теперь выберите, что хотите изменить',
                                                reply_markup=user_markup)
                         set_state(message.chat.id, 130)
@@ -1621,7 +1673,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 await bot.send_message(message.chat.id, 'Поста с таким названием нет!\nВыберите заново!')
 
         elif get_state(message.chat.id) in [15, 150]:
-            edition_post = get_chat_value_message(message)
+            edition_post = get_chat_value_message(message.chat.id)
 
             post_for_edit = Post.get_or_none(post_name=str(edition_post['post_name']))
             if post_for_edit is not None:
@@ -1652,21 +1704,21 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                             'message_id': edited_post.message_id
                         }
 
-                    edition_post = get_chat_value_message(message)
+                    edition_post = get_chat_value_message(message.chat.id)
 
                     if edition_post['status']:
                         await edit_post(bot, message, edition_post, settings, False)
 
                     user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                    user_markup.row('Изменить тему', 'Изменить описание')
-                    user_markup.row('Изменить дату', 'Изменить требования')
-                    user_markup.row('Изменить сайт проекта')
-                    user_markup.row('Изменить твиттер', 'Изменить дискорд')
-                    user_markup.row('Изменить баннер', 'Изменить хэштеги')
-                    user_markup.row(main_menu)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+                    user_markup.row(Menu.main_menu)
                     await bot.send_message(message.chat.id, 'Описание поста успешно изменено!',
                                            reply_markup=user_markup)
-                    await log(f"Description post {edition_post['post_name']} is changed by {message.chat.id}")
+                    await log(settings, f"Description post {edition_post['post_name']} is changed by {message.chat.id}")
                     set_state(message.chat.id, 13)
                 elif get_state(message.chat.id) == 150:
                     edited_post = Post.get_or_none(post_name=str(edition_post['post_name']))
@@ -1691,7 +1743,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                             'message_id': edited_post.message_id
                         }
 
-                    edition_post = get_chat_value_message(message)
+                    edition_post = get_chat_value_message(message.chat.id)
 
                     if await preview(bot, message, edition_post, settings):
                         key = InlineKeyboardMarkup()
@@ -1702,12 +1754,12 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                         await bot.send_message(message.chat.id, 'Хотите ли редактировать пост?', reply_markup=key)
                     else:
                         user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                        user_markup.row('Изменить тему', 'Изменить описание')
-                        user_markup.row('Изменить дату', 'Изменить требования')
-                        user_markup.row('Изменить сайт проекта')
-                        user_markup.row('Изменить твиттер', 'Изменить дискорд')
-                        user_markup.row('Изменить баннер', 'Изменить хэштеги')
-                        user_markup.row(main_menu)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+                        user_markup.row(Menu.main_menu)
                         await bot.send_message(message.chat.id, 'Теперь выберите, что хотите изменить',
                                                reply_markup=user_markup)
                         set_state(message.chat.id, 130)
@@ -1716,7 +1768,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 await bot.send_message(message.chat.id, 'Поста с таким названием нет!\nВыберите заново!')
 
         elif get_state(message.chat.id) in [16, 160]:
-            edition_post = get_chat_value_message(message)
+            edition_post = get_chat_value_message(message.chat.id)
 
             if message.text == '/empty':
                 post_date = ''
@@ -1754,21 +1806,21 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                             'message_id': edited_post.message_id
                         }
 
-                    edition_post = get_chat_value_message(message)
+                    edition_post = get_chat_value_message(message.chat.id)
 
                     if edition_post['status']:
                         await edit_post(bot, message, edition_post, settings, False)
 
                     user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                    user_markup.row('Изменить тему', 'Изменить описание')
-                    user_markup.row('Изменить дату', 'Изменить требования')
-                    user_markup.row('Изменить сайт проекта')
-                    user_markup.row('Изменить твиттер', 'Изменить дискорд')
-                    user_markup.row('Изменить баннер', 'Изменить хэштеги')
-                    user_markup.row(main_menu)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+                    user_markup.row(Menu.main_menu)
                     await bot.send_message(message.chat.id, 'Дата события успешно изменена!',
                                            reply_markup=user_markup)
-                    await log(f"Date post {edition_post['post_name']} is changed by {message.chat.id}")
+                    await log(settings, f"Date post {edition_post['post_name']} is changed by {message.chat.id}")
                     set_state(message.chat.id, 13)
                 elif get_state(message.chat.id) == 160:
                     edited_post = Post.get_or_none(post_name=str(edition_post['post_name']))
@@ -1793,7 +1845,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                             'message_id': edited_post.message_id
                         }
 
-                    edition_post = get_chat_value_message(message)
+                    edition_post = get_chat_value_message(message.chat.id)
 
                     if await preview(bot, message, edition_post, settings):
                         key = InlineKeyboardMarkup()
@@ -1804,12 +1856,12 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                         await bot.send_message(message.chat.id, 'Хотите ли редактировать пост?', reply_markup=key)
                     else:
                         user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                        user_markup.row('Изменить тему', 'Изменить описание')
-                        user_markup.row('Изменить дату', 'Изменить требования')
-                        user_markup.row('Изменить сайт проекта')
-                        user_markup.row('Изменить твиттер', 'Изменить дискорд')
-                        user_markup.row('Изменить баннер', 'Изменить хэштеги')
-                        user_markup.row(main_menu)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+                        user_markup.row(Menu.main_menu)
                         await bot.send_message(message.chat.id, 'Теперь выберите, что хотите изменить',
                                                reply_markup=user_markup)
                         set_state(message.chat.id, 130)
@@ -1817,7 +1869,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 await bot.send_message(message.chat.id, 'Поста с таким названием нет!\nВыберите заново!')
 
         elif get_state(message.chat.id) in [17, 170]:
-            edition_post = get_chat_value_message(message)
+            edition_post = get_chat_value_message(message.chat.id)
 
             if message.text == '/empty':
                 what_needs = ''
@@ -1855,21 +1907,21 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                             'message_id': edited_post.message_id
                         }
 
-                    edition_post = get_chat_value_message(message)
+                    edition_post = get_chat_value_message(message.chat.id)
 
                     if edition_post['status']:
                         await edit_post(bot, message, edition_post, settings, False)
 
                     user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                    user_markup.row('Изменить тему', 'Изменить описание')
-                    user_markup.row('Изменить дату', 'Изменить требования')
-                    user_markup.row('Изменить сайт проекта')
-                    user_markup.row('Изменить твиттер', 'Изменить дискорд')
-                    user_markup.row('Изменить баннер', 'Изменить хэштеги')
-                    user_markup.row(main_menu)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+                    user_markup.row(Menu.main_menu)
                     await bot.send_message(message.chat.id, 'Условия участия успешно изменены!',
                                            reply_markup=user_markup)
-                    await log(f"Requirements {edition_post['post_name']} is changed by {message.chat.id}")
+                    await log(settings, f"Requirements {edition_post['post_name']} is changed by {message.chat.id}")
                     set_state(message.chat.id, 13)
                 elif get_state(message.chat.id) == 170:
                     edited_post = Post.get_or_none(post_name=str(edition_post['post_name']))
@@ -1894,7 +1946,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                             'message_id': edited_post.message_id
                         }
 
-                    edition_post = get_chat_value_message(message)
+                    edition_post = get_chat_value_message(message.chat.id)
 
                     if await preview(bot, message, edition_post, settings):
                         key = InlineKeyboardMarkup()
@@ -1905,12 +1957,12 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                         await bot.send_message(message.chat.id, 'Хотите ли редактировать пост?', reply_markup=key)
                     else:
                         user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                        user_markup.row('Изменить тему', 'Изменить описание')
-                        user_markup.row('Изменить дату', 'Изменить требования')
-                        user_markup.row('Изменить сайт проекта')
-                        user_markup.row('Изменить твиттер', 'Изменить дискорд')
-                        user_markup.row('Изменить баннер', 'Изменить хэштеги')
-                        user_markup.row(main_menu)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+                        user_markup.row(Menu.main_menu)
                         await bot.send_message(message.chat.id, 'Теперь выберите, что хотите изменить',
                                                reply_markup=user_markup)
                         set_state(message.chat.id, 130)
@@ -1918,7 +1970,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 await bot.send_message(message.chat.id, 'Поста с таким названием нет!\nВыберите заново!')
 
         elif get_state(message.chat.id) in [18, 180]:
-            edition_post = get_chat_value_message(message)
+            edition_post = get_chat_value_message(message.chat.id)
 
             site = ''
 
@@ -1962,21 +2014,21 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                                 'message_id': edited_post.message_id
                             }
 
-                        edition_post = get_chat_value_message(message)
+                        edition_post = get_chat_value_message(message.chat.id)
 
                         if edition_post['status']:
                             await edit_post(bot, message, edition_post, settings, False)
 
                         user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                        user_markup.row('Изменить тему', 'Изменить описание')
-                        user_markup.row('Изменить дату', 'Изменить требования')
-                        user_markup.row('Изменить сайт проекта')
-                        user_markup.row('Изменить твиттер', 'Изменить дискорд')
-                        user_markup.row('Изменить баннер', 'Изменить хэштеги')
-                        user_markup.row(main_menu)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+                        user_markup.row(Menu.main_menu)
                         await bot.send_message(message.chat.id, 'Сайт проекта успешно изменен!',
                                                reply_markup=user_markup)
-                        await log(f"Requirements {edition_post['post_name']} is changed by {message.chat.id}")
+                        await log(settings, f"Requirements {edition_post['post_name']} is changed by {message.chat.id}")
                         set_state(message.chat.id, 13)
                     elif get_state(message.chat.id) == 180:
                         edited_post = Post.get_or_none(post_name=str(edition_post['post_name']))
@@ -2001,7 +2053,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                                 'message_id': edited_post.message_id
                             }
 
-                        edition_post = get_chat_value_message(message)
+                        edition_post = get_chat_value_message(message.chat.id)
 
                         if await preview(bot, message, edition_post, settings):
                             key = InlineKeyboardMarkup()
@@ -2012,12 +2064,12 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                             await bot.send_message(message.chat.id, 'Хотите ли редактировать пост?', reply_markup=key)
                         else:
                             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                            user_markup.row('Изменить тему', 'Изменить описание')
-                            user_markup.row('Изменить дату', 'Изменить требования')
-                            user_markup.row('Изменить сайт проекта')
-                            user_markup.row('Изменить твиттер', 'Изменить дискорд')
-                            user_markup.row('Изменить баннер', 'Изменить хэштеги')
-                            user_markup.row(main_menu)
+                            user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+                            user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+                            user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+                            user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+                            user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+                            user_markup.row(Menu.main_menu)
                             await bot.send_message(message.chat.id, 'Теперь выберите, что хотите изменить',
                                                    reply_markup=user_markup)
                             set_state(message.chat.id, 130)
@@ -2025,7 +2077,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                     await bot.send_message(message.chat.id, 'Поста с таким названием нет!\nВыберите заново!')
 
         elif get_state(message.chat.id) in [19, 190]:
-            edition_post = get_chat_value_message(message)
+            edition_post = get_chat_value_message(message.chat.id)
 
             twitter = ''
 
@@ -2069,21 +2121,21 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                                 'message_id': edited_post.message_id
                             }
 
-                        edition_post = get_chat_value_message(message)
+                        edition_post = get_chat_value_message(message.chat.id)
 
                         if edition_post['status']:
                             await edit_post(bot, message, edition_post, settings, False)
 
                         user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                        user_markup.row('Изменить тему', 'Изменить описание')
-                        user_markup.row('Изменить дату', 'Изменить требования')
-                        user_markup.row('Изменить сайт проекта')
-                        user_markup.row('Изменить твиттер', 'Изменить дискорд')
-                        user_markup.row('Изменить баннер', 'Изменить хэштеги')
-                        user_markup.row(main_menu)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+                        user_markup.row(Menu.main_menu)
                         await bot.send_message(message.chat.id, 'Твиттер проекта успешно изменен!',
                                                reply_markup=user_markup)
-                        await log(f"Requirements {edition_post['post_name']} is changed by {message.chat.id}")
+                        await log(settings, f"Requirements {edition_post['post_name']} is changed by {message.chat.id}")
                         set_state(message.chat.id, 13)
                     elif get_state(message.chat.id) == 190:
                         edited_post = Post.get_or_none(post_name=str(edition_post['post_name']))
@@ -2108,7 +2160,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                                 'message_id': edited_post.message_id
                             }
 
-                        edition_post = get_chat_value_message(message)
+                        edition_post = get_chat_value_message(message.chat.id)
 
                         if await preview(bot, message, edition_post, settings):
                             key = InlineKeyboardMarkup()
@@ -2119,12 +2171,12 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                             await bot.send_message(message.chat.id, 'Хотите ли редактировать пост?', reply_markup=key)
                         else:
                             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                            user_markup.row('Изменить тему', 'Изменить описание')
-                            user_markup.row('Изменить дату', 'Изменить требования')
-                            user_markup.row('Изменить сайт проекта')
-                            user_markup.row('Изменить твиттер', 'Изменить дискорд')
-                            user_markup.row('Изменить баннер', 'Изменить хэштеги')
-                            user_markup.row(main_menu)
+                            user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+                            user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+                            user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+                            user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+                            user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+                            user_markup.row(Menu.main_menu)
                             await bot.send_message(message.chat.id, 'Теперь выберите, что хотите изменить',
                                                    reply_markup=user_markup)
                             set_state(message.chat.id, 130)
@@ -2132,7 +2184,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                     await bot.send_message(message.chat.id, 'Поста с таким названием нет!\nВыберите заново!')
 
         elif get_state(message.chat.id) in [20, 200]:
-            edition_post = get_chat_value_message(message)
+            edition_post = get_chat_value_message(message.chat.id)
 
             discord = ''
 
@@ -2176,21 +2228,21 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                                 'message_id': edited_post.message_id
                             }
 
-                        edition_post = get_chat_value_message(message)
+                        edition_post = get_chat_value_message(message.chat.id)
 
                         if edition_post['status']:
                             await edit_post(bot, message, edition_post, settings, False)
 
                         user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                        user_markup.row('Изменить тему', 'Изменить описание')
-                        user_markup.row('Изменить дату', 'Изменить требования')
-                        user_markup.row('Изменить сайт проекта')
-                        user_markup.row('Изменить твиттер', 'Изменить дискорд')
-                        user_markup.row('Изменить баннер', 'Изменить хэштеги')
-                        user_markup.row(main_menu)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+                        user_markup.row(Menu.main_menu)
                         await bot.send_message(message.chat.id, 'Дискорд проекта успешно изменен!',
                                                reply_markup=user_markup)
-                        await log(f"Requirements {edition_post['post_name']} is changed by {message.chat.id}")
+                        await log(settings, f"Requirements {edition_post['post_name']} is changed by {message.chat.id}")
                         set_state(message.chat.id, 13)
                     elif get_state(message.chat.id) == 200:
                         edited_post = Post.get_or_none(post_name=str(edition_post['post_name']))
@@ -2215,7 +2267,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                                 'message_id': edited_post.message_id
                             }
 
-                        edition_post = get_chat_value_message(message)
+                        edition_post = get_chat_value_message(message.chat.id)
 
                         if await preview(bot, message, edition_post, settings):
                             key = InlineKeyboardMarkup()
@@ -2226,12 +2278,12 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                             await bot.send_message(message.chat.id, 'Хотите ли редактировать пост?', reply_markup=key)
                         else:
                             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                            user_markup.row('Изменить тему', 'Изменить описание')
-                            user_markup.row('Изменить дату', 'Изменить требования')
-                            user_markup.row('Изменить сайт проекта')
-                            user_markup.row('Изменить твиттер', 'Изменить дискорд')
-                            user_markup.row('Изменить баннер', 'Изменить хэштеги')
-                            user_markup.row(main_menu)
+                            user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+                            user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+                            user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+                            user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+                            user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+                            user_markup.row(Menu.main_menu)
                             await bot.send_message(message.chat.id, 'Теперь выберите, что хотите изменить',
                                                    reply_markup=user_markup)
                             set_state(message.chat.id, 130)
@@ -2240,7 +2292,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
 
         elif get_state(message.chat.id) in [21, 210]:
             '''download photo'''
-            edition_post = get_chat_value_message(message)
+            edition_post = get_chat_value_message(message.chat.id)
 
             src = ''
             if message.text == '/empty':
@@ -2295,20 +2347,20 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                             'message_id': edited_post.message_id
                         }
 
-                    edition_post = get_chat_value_message(message)
+                    edition_post = get_chat_value_message(message.chat.id)
 
                     if edition_post['status']:
                         await edit_post(bot, message, edition_post, settings, True)
 
                     user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                    user_markup.row('Изменить тему', 'Изменить описание')
-                    user_markup.row('Изменить дату', 'Изменить требования')
-                    user_markup.row('Изменить сайт проекта')
-                    user_markup.row('Изменить твиттер', 'Изменить дискорд')
-                    user_markup.row('Изменить баннер', 'Изменить хэштеги')
-                    user_markup.row(main_menu)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+                    user_markup.row(Menu.main_menu)
                     await bot.send_message(message.chat.id, 'Баннер поста успешно изменен!', reply_markup=user_markup)
-                    await log(f"Picture {edition_post['post_name']} is changed by {message.chat.id}")
+                    await log(settings, f"Picture {edition_post['post_name']} is changed by {message.chat.id}")
                     set_state(message.chat.id, 13)
                 elif get_state(message.chat.id) == 210:
                     edited_post = Post.get_or_none(post_name=str(edition_post['post_name']))
@@ -2333,7 +2385,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                             'message_id': edited_post.message_id
                         }
 
-                    edition_post = get_chat_value_message(message)
+                    edition_post = get_chat_value_message(message.chat.id)
 
                     if await preview(bot, message, edition_post, settings):
                         key = InlineKeyboardMarkup()
@@ -2344,12 +2396,12 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                         await bot.send_message(message.chat.id, 'Хотите ли редактировать пост?', reply_markup=key)
                     else:
                         user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                        user_markup.row('Изменить тему', 'Изменить описание')
-                        user_markup.row('Изменить дату', 'Изменить требования')
-                        user_markup.row('Изменить сайт проекта')
-                        user_markup.row('Изменить твиттер', 'Изменить дискорд')
-                        user_markup.row('Изменить баннер', 'Изменить хэштеги')
-                        user_markup.row(main_menu)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+                        user_markup.row(Menu.main_menu)
                         await bot.send_message(message.chat.id, 'Теперь выберите, что хотите изменить',
                                                reply_markup=user_markup)
                         set_state(message.chat.id, 130)
@@ -2357,7 +2409,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 await bot.send_message(message.chat.id, 'Поста с таким названием нет!\nВыберите заново!')
 
         elif get_state(message.chat.id) in [22, 220]:
-            edition_post = get_chat_value_message(message)
+            edition_post = get_chat_value_message(message.chat.id)
 
             post_for_edit = Post.get_or_none(post_name=str(edition_post['post_name']))
 
@@ -2388,20 +2440,20 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                             'message_id': edited_post.message_id
                         }
 
-                    edition_post = get_chat_value_message(message)
+                    edition_post = get_chat_value_message(message.chat.id)
 
                     if edition_post['status']:
                         await edit_post(bot, message, edition_post, settings, False)
 
                     user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                    user_markup.row('Изменить тему', 'Изменить описание')
-                    user_markup.row('Изменить дату', 'Изменить требования')
-                    user_markup.row('Изменить сайт проекта')
-                    user_markup.row('Изменить твиттер', 'Изменить дискорд')
-                    user_markup.row('Изменить баннер', 'Изменить хэштеги')
-                    user_markup.row(main_menu)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+                    user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+                    user_markup.row(Menu.main_menu)
                     await bot.send_message(message.chat.id, 'Хэштеги успешно изменены!', reply_markup=user_markup)
-                    await log(f"Hashtags {edition_post['post_name']} is changed by {message.chat.id}")
+                    await log(settings, f"Hashtags {edition_post['post_name']} is changed by {message.chat.id}")
                     set_state(message.chat.id, 13)
                 elif get_state(message.chat.id) == 220:
                     edited_post = Post.get_or_none(post_name=str(edition_post['post_name']))
@@ -2426,7 +2478,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                             'message_id': edited_post.message_id
                         }
 
-                    edition_post = get_chat_value_message(message)
+                    edition_post = get_chat_value_message(message.chat.id)
 
                     if await preview(bot, message, edition_post, settings):
                         key = InlineKeyboardMarkup()
@@ -2437,12 +2489,12 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                         await bot.send_message(message.chat.id, 'Хотите ли редактировать пост?', reply_markup=key)
                     else:
                         user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                        user_markup.row('Изменить тему', 'Изменить описание')
-                        user_markup.row('Изменить дату', 'Изменить требования')
-                        user_markup.row('Изменить сайт проекта')
-                        user_markup.row('Изменить твиттер', 'Изменить дискорд')
-                        user_markup.row('Изменить баннер', 'Изменить хэштеги')
-                        user_markup.row(main_menu)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+                        user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+                        user_markup.row(Menu.main_menu)
                         await bot.send_message(message.chat.id, 'Теперь выберите, что хотите изменить',
                                                reply_markup=user_markup)
                         set_state(message.chat.id, 130)
@@ -2453,15 +2505,15 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
             if message.forward_from:
                 result_text = new_author(settings, message.forward_from.id, message.forward_from.username)
                 user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                user_markup.row('Добавить нового автора', 'Удалить автора')
-                user_markup.row(main_menu)
+                user_markup.row(Menu.ListsMenu.AuthorMenu.add_new, Menu.ListsMenu.AuthorMenu.delete)
+                user_markup.row(Menu.main_menu)
                 await bot.send_message(message.chat.id, result_text, reply_markup=user_markup)
-                await log(f'New author {message.forward_from.username} is added by {message.chat.id}')
+                await log(settings, f'New author {message.forward_from.username} is added by {message.chat.id}')
                 delete_state(message.chat.id)
             else:
                 user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                user_markup.row('Добавить нового автора', 'Удалить автора')
-                user_markup.row(main_menu)
+                user_markup.row(Menu.ListsMenu.AuthorMenu.add_new, Menu.ListsMenu.AuthorMenu.delete)
+                user_markup.row(Menu.main_menu)
                 await bot.send_message(message.chat.id, 'Новый автор не был добавлен\n'
                                                         'Перешлите сообщение пользователя в бота, '
                                                         'чтобы сделать его автором.',
@@ -2473,9 +2525,9 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
             if int(author[0]) in [int(author[0]) for item in get_author_list() if int(author[0]) in item]:
                 try:
                     del_id(Author, int(author[0]))
-                except Exception as exc:
-                    logging.warning(exc)
-                    await log('Author was not deleted')
+                except Exception as e:
+                    logging.warning(e)
+                    await log(settings, 'Author was not deleted')
                 else:
                     new_blocked_user(
                         his_id=int(author[0]),
@@ -2483,7 +2535,7 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                         who_blocked_username=message.chat.username
                     )
                     await bot.send_message(message.chat.id, 'Автор успешно удалён из списка')
-                    await log(f'The author {message.text} is removed by {message.chat.id}')
+                    await log(settings, f'The author {message.text} is removed by {message.chat.id}')
                     delete_state(message.chat.id)
             else:
                 await bot.send_message(message.chat.id, 'Такого id в списках авторов не обнаружено! '
@@ -2494,15 +2546,15 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
             if message.forward_from:
                 result_text = new_admin(message.forward_from.id, message.forward_from.username)
                 user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                user_markup.row('Добавить нового админа', 'Удалить админа')
-                user_markup.row(main_menu)
+                user_markup.row(Menu.ListsMenu.AdminMenu.add_new, Menu.ListsMenu.AdminMenu.delete)
+                user_markup.row(Menu.main_menu)
                 await bot.send_message(message.chat.id, result_text, reply_markup=user_markup)
-                await log(f'New admin {message.forward_from.username} is added by {message.chat.id}')
+                await log(settings, f'New admin {message.forward_from.username} is added by {message.chat.id}')
                 delete_state(message.chat.id)
             else:
                 user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                user_markup.row('Добавить нового админа', 'Удалить админа')
-                user_markup.row(main_menu)
+                user_markup.row(Menu.ListsMenu.AdminMenu.add_new, Menu.ListsMenu.AdminMenu.delete)
+                user_markup.row(Menu.main_menu)
                 await bot.send_message(message.chat.id, 'Новый админ не был добавлен\n'
                                                         'Перешлите сообщение пользователя в бота, '
                                                         'чтобы сделать его админом.',
@@ -2514,12 +2566,12 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
             if int(admin[0]) in [int(admin[0]) for item in get_admin_list() if int(admin[0]) in item]:
                 try:
                     del_id(Admin, int(admin[0]))
-                except Exception as exc:
-                    logging.warning(exc)
-                    await log('Admin was not deleted')
+                except Exception as e:
+                    logging.warning(e)
+                    await log(settings, 'Admin was not deleted')
                 else:
                     await bot.send_message(message.chat.id, 'Админ успешно удалён из списка')
-                    await log(f'The admin {message.text} is removed by {message.chat.id}')
+                    await log(settings, f'The admin {message.text} is removed by {message.chat.id}')
                     delete_state(message.chat.id)
             else:
                 await bot.send_message(message.chat.id, 'Такого id в списках админов не обнаружено! '
@@ -2530,15 +2582,15 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
             if message.forward_from:
                 result_text = new_moder(message.forward_from.id, message.forward_from.username)
                 user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                user_markup.row('Добавить нового модератора', 'Удалить модератора')
-                user_markup.row(main_menu)
+                user_markup.row(Menu.ListsMenu.ModerMenu.add_new, Menu.ListsMenu.ModerMenu.delete)
+                user_markup.row(Menu.main_menu)
                 await bot.send_message(message.chat.id, result_text, reply_markup=user_markup)
-                await log(f'New moder {message.text} is added by {message.chat.id}')
+                await log(settings, f'New moder {message.text} is added by {message.chat.id}')
                 delete_state(message.chat.id)
             else:
                 user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                user_markup.row('Добавить нового модератора', 'Удалить модератора')
-                user_markup.row(main_menu)
+                user_markup.row(Menu.ListsMenu.ModerMenu.add_new, Menu.ListsMenu.ModerMenu.delete)
+                user_markup.row(Menu.main_menu)
                 await bot.send_message(message.chat.id, 'Новый модератор не был добавлен\n'
                                                         'Перешлите сообщение пользователя в бота, '
                                                         'чтобы сделать его модератором.',
@@ -2550,12 +2602,12 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
             if int(moder[0]) in [int(moder[0]) for item in get_moder_list() if int(moder[0]) in item]:
                 try:
                     del_id(Admin, int(moder[0]))
-                except Exception as exc:
-                    logging.warning(exc)
-                    await log('Moder was not deleted')
+                except Exception as e:
+                    logging.warning(e)
+                    await log(settings, 'Moder was not deleted')
                 else:
                     await bot.send_message(message.chat.id, 'Модератор успешно удалён из списка')
-                    await log(f'The moder {message.text} is removed by {message.chat.id}')
+                    await log(settings, f'The moder {message.text} is removed by {message.chat.id}')
                     delete_state(message.chat.id)
             else:
                 await bot.send_message(message.chat.id, 'Такого id в списках модеров не обнаружено! '
@@ -2564,15 +2616,18 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
 
         elif get_state(message.chat.id) == 61:
             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-            user_markup.row(f'Часовой пояс: {settings.time_zone}')
-            user_markup.row(f'Название канала: {settings.channel_name}')
-            user_markup.row(f'Порог опыта авторам: {settings.threshold_xp}')
-            user_markup.row('Изменить выводное сообщение команды /help')
-            user_markup.row('Изменить нижнюю подпись для постов')
-            user_markup.row('Скачать лог файл')
-            user_markup.row('Скачать резервную копию БД')
-            user_markup.row('Создать резервную копию БД')
-            user_markup.row(main_menu)
+            user_markup.row(Menu.Settings.time_zone_text + str(settings.time_zone))
+            user_markup.row(Menu.Settings.channel_name_text + str(settings.channel_name))
+            user_markup.row(Menu.Settings.threshold_xp_text + str(settings.threshold_xp))
+            user_markup.row(Menu.Settings.help_edit_text)
+            user_markup.row(Menu.Settings.footer_edit_text)
+            user_markup.row(Menu.Settings.log_files_download_text)
+            user_markup.row(Menu.Settings.copy_db_download_text)
+            user_markup.row(Menu.Settings.create_copy_db_text)
+            user_markup.row(Menu.Settings.restore_db_text)
+            user_markup.row(Menu.Settings.check_emoji_text)
+            user_markup.row(Menu.Settings.bad_emoji_text)
+            user_markup.row(Menu.main_menu)
 
             settings.help_text = message.text
             settings.help_text_entities = message
@@ -2592,15 +2647,18 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
 
         elif get_state(message.chat.id) == 62:
             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-            user_markup.row(f'Часовой пояс: {settings.time_zone}')
-            user_markup.row(f'Название канала: {settings.channel_name}')
-            user_markup.row(f'Порог опыта авторам: {settings.threshold_xp}')
-            user_markup.row('Изменить выводное сообщение команды /help')
-            user_markup.row('Изменить нижнюю подпись для постов')
-            user_markup.row('Скачать лог файл')
-            user_markup.row('Скачать резервную копию БД')
-            user_markup.row('Создать резервную копию БД')
-            user_markup.row(main_menu)
+            user_markup.row(Menu.Settings.time_zone_text + str(settings.time_zone))
+            user_markup.row(Menu.Settings.channel_name_text + str(settings.channel_name))
+            user_markup.row(Menu.Settings.threshold_xp_text + str(settings.threshold_xp))
+            user_markup.row(Menu.Settings.help_edit_text)
+            user_markup.row(Menu.Settings.footer_edit_text)
+            user_markup.row(Menu.Settings.log_files_download_text)
+            user_markup.row(Menu.Settings.copy_db_download_text)
+            user_markup.row(Menu.Settings.create_copy_db_text)
+            user_markup.row(Menu.Settings.restore_db_text)
+            user_markup.row(Menu.Settings.check_emoji_text)
+            user_markup.row(Menu.Settings.bad_emoji_text)
+            user_markup.row(Menu.main_menu)
 
             settings.footer_text = message.text
             settings.footer_text_entities = message
@@ -2621,15 +2679,18 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
         elif get_state(message.chat.id) == 63:
             if message.text.isdigit():
                 user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                user_markup.row(f'Часовой пояс: {settings.time_zone}')
-                user_markup.row(f'Название канала: {settings.channel_name}')
-                user_markup.row(f'Порог опыта авторам: {settings.threshold_xp}')
-                user_markup.row('Изменить выводное сообщение команды /help')
-                user_markup.row('Изменить нижнюю подпись для постов')
-                user_markup.row('Скачать лог файл')
-                user_markup.row('Скачать резервную копию БД')
-                user_markup.row('Создать резервную копию БД')
-                user_markup.row(main_menu)
+                user_markup.row(Menu.Settings.time_zone_text + str(settings.time_zone))
+                user_markup.row(Menu.Settings.channel_name_text + str(settings.channel_name))
+                user_markup.row(Menu.Settings.threshold_xp_text + str(settings.threshold_xp))
+                user_markup.row(Menu.Settings.help_edit_text)
+                user_markup.row(Menu.Settings.footer_edit_text)
+                user_markup.row(Menu.Settings.log_files_download_text)
+                user_markup.row(Menu.Settings.copy_db_download_text)
+                user_markup.row(Menu.Settings.create_copy_db_text)
+                user_markup.row(Menu.Settings.restore_db_text)
+                user_markup.row(Menu.Settings.check_emoji_text)
+                user_markup.row(Menu.Settings.bad_emoji_text)
+                user_markup.row(Menu.main_menu)
 
                 settings.threshold_xp = int(message.text)
 
@@ -2639,9 +2700,129 @@ async def in_bot_panel(bot: Bot, settings: Settings, message: Message) -> None:
                 delete_state(message.chat.id)
             else:
                 user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-                user_markup.row(main_menu)
+                user_markup.row(Menu.main_menu)
 
                 await bot.send_message(message.chat.id, 'Введите ЧИСЛО', reply_markup=user_markup)
+
+        elif get_state(message.chat.id) == 65:
+            user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
+            user_markup.row(Menu.Settings.time_zone_text + str(settings.time_zone))
+            user_markup.row(Menu.Settings.channel_name_text + str(settings.channel_name))
+            user_markup.row(Menu.Settings.threshold_xp_text + str(settings.threshold_xp))
+            user_markup.row(Menu.Settings.help_edit_text)
+            user_markup.row(Menu.Settings.footer_edit_text)
+            user_markup.row(Menu.Settings.log_files_download_text)
+            user_markup.row(Menu.Settings.copy_db_download_text)
+            user_markup.row(Menu.Settings.create_copy_db_text)
+            user_markup.row(Menu.Settings.restore_db_text)
+            user_markup.row(Menu.Settings.check_emoji_text)
+            user_markup.row(Menu.Settings.bad_emoji_text)
+            user_markup.row(Menu.main_menu)
+
+            try:
+                with open(files.reserve_db_folder + message.text, 'rb') as db:
+                    db_bytes = db.read()
+                    with open(files.main_db, 'wb') as rdb:
+                        rdb.write(db_bytes)
+            except Exception as e:
+                logging.error(e)
+                await bot.send_message(message.chat.id, "Ошибка при восстановлении резервной копии")
+            else:
+                await bot.send_message(message.chat.id, 'Данные были восстановлены', reply_markup=user_markup)
+                delete_state(message.chat.id)
+
+        elif get_state(message.chat.id) == 71:
+            emoji_list = find_emoji(message.text)
+            if len(emoji_list):
+                user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
+                user_markup.row(Menu.Settings.time_zone_text + str(settings.time_zone))
+                user_markup.row(Menu.Settings.channel_name_text + str(settings.channel_name))
+                user_markup.row(Menu.Settings.threshold_xp_text + str(settings.threshold_xp))
+                user_markup.row(Menu.Settings.help_edit_text)
+                user_markup.row(Menu.Settings.footer_edit_text)
+                user_markup.row(Menu.Settings.log_files_download_text)
+                user_markup.row(Menu.Settings.copy_db_download_text)
+                user_markup.row(Menu.Settings.create_copy_db_text)
+                user_markup.row(Menu.Settings.restore_db_text)
+                user_markup.row(Menu.Settings.check_emoji_text)
+                user_markup.row(Menu.Settings.bad_emoji_text)
+                user_markup.row(Menu.main_menu)
+
+                for emoji in emoji_list:
+                    if add_emoji_as_pattern(emoji):
+                        await bot.send_message(message.chat.id,
+                                               '`Плохой` эмоджи добавлен', reply_markup=user_markup)
+                    else:
+                        await bot.send_message(message.chat.id,
+                                               'Такой `Плохой` эмоджи уже есть', reply_markup=user_markup)
+                delete_state(message.chat.id)
+            else:
+                user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
+                user_markup.row(Menu.main_menu)
+
+                await bot.send_message(message.chat.id, 'Введите ЭМОДЖИ', reply_markup=user_markup)
+
+        elif get_state(message.chat.id) == 70:
+            emoji_list = find_emoji(message.text)
+            if len(emoji_list):
+                user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
+                user_markup.row(Menu.Settings.time_zone_text + str(settings.time_zone))
+                user_markup.row(Menu.Settings.channel_name_text + str(settings.channel_name))
+                user_markup.row(Menu.Settings.threshold_xp_text + str(settings.threshold_xp))
+                user_markup.row(Menu.Settings.help_edit_text)
+                user_markup.row(Menu.Settings.footer_edit_text)
+                user_markup.row(Menu.Settings.log_files_download_text)
+                user_markup.row(Menu.Settings.copy_db_download_text)
+                user_markup.row(Menu.Settings.create_copy_db_text)
+                user_markup.row(Menu.Settings.restore_db_text)
+                user_markup.row(Menu.Settings.check_emoji_text)
+                user_markup.row(Menu.Settings.bad_emoji_text)
+                user_markup.row(Menu.main_menu)
+
+                for emoji in emoji_list:
+                    EMOJI_OFFSET = 1 if emoji_count(message.text) else 0
+                    entities_list = [{"type": "strikethrough",
+                                      "offset": 0,
+                                      "length": len("Checking")},
+                                     {"type": "text_link",
+                                      "offset": len(f"Checking emoji {emoji} "
+                                                    "for offset via ") + EMOJI_OFFSET,
+                                      "length": len("link"),
+                                      "url": "http://google.com/"},
+                                     {"type": "underline",
+                                      "offset": len(f"Checking emoji {emoji} "
+                                                    "for offset via link. "
+                                                    "Double ") + EMOJI_OFFSET,
+                                      "length": len("checking")}]
+                    entities = []
+
+                    for entity in entities_list:
+                        if entity["type"] == "text_link":
+                            entity = MessageEntity(type=entity["type"],
+                                                   offset=entity["offset"],
+                                                   length=entity["length"], url=entity["url"])
+                            entities.append(entity)
+                        elif entity["type"] in ["mention", "url", "hashtag", "cashtag", "bot_command",
+                                                "email", "phone_number", "bold", "italic", "underline",
+                                                "strikethrough", "code", "pre"]:
+                            entity = MessageEntity(type=entity["type"],
+                                                   offset=entity["offset"],
+                                                   length=entity["length"])
+                            entities.append(entity)
+                    # result = emoji.encode('unicode-escape').decode('ASCII')
+                    # await bot.send_message(message.chat.id, result, reply_markup=user_markup)
+                    await bot.send_message(message.chat.id, f"Checking emoji {emoji} "
+                                                            "for offset via link. "
+                                                            "Double checking offset",
+                                           entities=entities,
+                                           reply_markup=user_markup)
+
+                delete_state(message.chat.id)
+            else:
+                user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
+                user_markup.row(Menu.main_menu)
+
+                await bot.send_message(message.chat.id, 'Введите ЭМОДЖИ', reply_markup=user_markup)
     else:
         entity_list = []
         entity = MessageEntity(type="text_link",
@@ -2667,18 +2848,18 @@ async def bot_inline(bot: Bot, callback_query: CallbackQuery, settings: Settings
     if isinstance(current_user, BlockedUser):
         await bot.send_message(callback_query.message.chat.id, "Вы были заблокированы администратором бота!")
         delete_state(callback_query.message.chat.id)
-    elif isinstance(current_user, (Admin, Author)) or callback_query.message.chat.id == admin_id:
+    elif isinstance(current_user, (Admin, Author)) or callback_query.message.chat.id == SUPER_ADMIN_ID:
         if callback_query.data == 'Вернуться в главное меню':
             if get_state(callback_query.message.chat.id):
                 delete_state(callback_query.message.chat.id)
-            if get_chat_value_message(callback_query.message):
-                delete_chat_value_message(callback_query.message)
+            if get_chat_value_message(callback_query.message.chat.id):
+                delete_chat_value_message(callback_query.message.chat.id)
 
             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-            user_markup.row('Посты')
-            user_markup.row('Списки')
+            user_markup.row(Menu.posts)
+            user_markup.row(Menu.lists)
             if current_user.permissions == 'admin_permissions':
-                user_markup.row('Настройки бота')
+                user_markup.row(Menu.settings)
 
             # удаляется старое сообщение
             await bot.delete_message(callback_query.message.chat.id, callback_query.message.message_id)
@@ -2816,12 +2997,12 @@ async def bot_inline(bot: Bot, callback_query: CallbackQuery, settings: Settings
             await bot.delete_message(callback_query.message.chat.id, callback_query.message.message_id)
 
             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-            user_markup.row('Изменить тему', 'Изменить описание')
-            user_markup.row('Изменить дату', 'Изменить требования')
-            user_markup.row('Изменить сайт проекта')
-            user_markup.row('Изменить твиттер', 'Изменить дискорд')
-            user_markup.row('Изменить баннер', 'Изменить хэштеги')
-            user_markup.row(main_menu)
+            user_markup.row(Menu.MenuPosts.EditMenu.edit_name, Menu.MenuPosts.EditMenu.edit_desc)
+            user_markup.row(Menu.MenuPosts.EditMenu.edit_date, Menu.MenuPosts.EditMenu.edit_needs)
+            user_markup.row(Menu.MenuPosts.EditMenu.edit_site)
+            user_markup.row(Menu.MenuPosts.EditMenu.edit_twitter, Menu.MenuPosts.EditMenu.edit_discord)
+            user_markup.row(Menu.MenuPosts.EditMenu.edit_banner, Menu.MenuPosts.EditMenu.edit_hashtags)
+            user_markup.row(Menu.main_menu)
             await bot.send_message(callback_query.message.chat.id, 'Теперь выберите, что хотите изменить',
                                    reply_markup=user_markup)
             set_state(callback_query.message.chat.id, 130)
@@ -2837,7 +3018,7 @@ async def bot_inline(bot: Bot, callback_query: CallbackQuery, settings: Settings
         elif callback_query.data == 'Разместить пост':
             await bot.delete_message(callback_query.message.chat.id, callback_query.message.message_id)
             entity_list = []
-            unposted_post = get_chat_value_message(callback_query.message)
+            unposted_post = get_chat_value_message(callback_query.message.chat.id)
             text = f"{unposted_post['post_name']}\n\n" \
                    f"{unposted_post['post_desc']}\n\n"
 
@@ -2973,7 +3154,7 @@ async def bot_inline(bot: Bot, callback_query: CallbackQuery, settings: Settings
                     except Exception as e:
                         logging.warning(e)
                     else:
-                        await log(
+                        await log(settings,
                             f"Post {str(unposted_post['post_name'])} is posted by {callback_query.message.chat.id}")
 
                         post_for_pos = Post.get(Post.post_name == str(unposted_post['post_name']))
@@ -2995,7 +3176,7 @@ async def bot_inline(bot: Bot, callback_query: CallbackQuery, settings: Settings
                     except Exception as e:
                         logging.warning(e)
                     else:
-                        await log(
+                        await log(settings,
                             f"Post {str(unposted_post['post_name'])} is posted by {callback_query.message.chat.id}")
 
                         post_for_pos = Post.get(Post.post_name == str(unposted_post['post_name']))
@@ -3016,7 +3197,7 @@ async def bot_inline(bot: Bot, callback_query: CallbackQuery, settings: Settings
                     except Exception as e:
                         logging.warning(e)
                     else:
-                        await log(
+                        await log(settings,
                             f"Post {str(unposted_post['post_name'])} is posted by {callback_query.message.chat.id}")
 
                         post_for_pos = Post.get(Post.post_name == str(unposted_post['post_name']))
@@ -3038,7 +3219,7 @@ async def bot_inline(bot: Bot, callback_query: CallbackQuery, settings: Settings
                     except Exception as e:
                         logging.warning(e)
                     else:
-                        await log(
+                        await log(settings,
                             f"Post {str(unposted_post['post_name'])} is posted by {callback_query.message.chat.id}")
 
                         post_for_pos = Post.get(Post.post_name == str(unposted_post['post_name']))
@@ -3054,15 +3235,15 @@ async def bot_inline(bot: Bot, callback_query: CallbackQuery, settings: Settings
                             logging.warning(e)
 
             user_markup = ReplyKeyboardMarkup(resize_keyboard=True)
-            user_markup.row('Посты')
-            user_markup.row('Списки')
+            user_markup.row(Menu.posts)
+            user_markup.row(Menu.lists)
             if current_user.permissions == 'admin_permissions':
-                user_markup.row('Настройки бота')
+                user_markup.row(Menu.settings)
 
             await bot.send_message(callback_query.message.chat.id, 'Пост был размещен на канале.',
                                    reply_markup=user_markup)
 
-            delete_chat_value_message(callback_query.message)
+            delete_chat_value_message(callback_query.message.chat.id)
             delete_state(callback_query.message.chat.id)
 
         elif callback_query.data == 'Вернуться в меню размещения':
@@ -3078,12 +3259,12 @@ async def bot_inline(bot: Bot, callback_query: CallbackQuery, settings: Settings
                 await bot.send_message(callback_query.message.chat.id, 'Не размещенных постов нет!',
                                        reply_markup=user_markup)
             else:
-                user_markup.row(main_menu)
+                user_markup.row(Menu.main_menu)
                 await bot.send_message(callback_query.message.chat.id, 'Какой пост хотите разместить?',
                                        parse_mode='Markdown', reply_markup=user_markup)
                 set_state(callback_query.message.chat.id, 90)
 
-            delete_chat_value_message(callback_query.message)
+            delete_chat_value_message(callback_query.message.chat.id)
     else:
         entity_list = []
         entity = MessageEntity(type="text_link",

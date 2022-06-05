@@ -13,3 +13,4 @@ system_log = 'data/system_log.log'
 
 example_text = 'data/example.txt'
 photo_example = 'data/media/example/hare_example.jpg'
+emoji_patterns = 'data/emoji_patterns.txt'

@@ -1,4 +1,4 @@
-FROM python:3.8.13-slim
+FROM python:3.8-alpine
 
 
 RUN mkdir -p /usr/src/bot/
@@ -10,4 +10,4 @@ COPY . .
 RUN pip install -r requirements.txt
 
 
-CMD cd bot && python bot.py
+ENTRYPOINT cd bot && python bot.py

@@ -1,4 +1,6 @@
+import codecs
 import logging
+from logging.handlers import RotatingFileHandler
 import shelve
 from typing import Type, Union, List, Dict
 
@@ -7,38 +9,35 @@ import pendulum
 import re
 
 from aiogram import Bot
-from aiogram.types import MessageEntity, InlineKeyboardMarkup, InlineKeyboardButton, Message
+from aiogram.types import MessageEntity, InlineKeyboardMarkup, InlineKeyboardButton, Message, InputMediaPhoto
 from aiogram.utils.json import json
 
 import files
-from extensions import Settings
+from extensions import Settings, SUPER_ADMIN_ID
 from models import User, Author, Admin, BlockedUser
-from config import admin_id
-
-# set logging level
-logging.basicConfig(filename=files.system_log, format='%(levelname)s:%(name)s:%(asctime)s:%(message)s',
-                    datefmt='%d.%m.%Y %I:%M:%S %p', level=logging.INFO)
-
-regrex_pattern = re.compile(pattern="["
-                                    u"\U0001F601-\U0001F64F"  # emoticons
-                                    u"\U0001F30D-\U0001F567"  # symbols & pictographs
-                                    u"\U0001F681-\U0001F6C5"  # transport & map symbols
-                                    u"\U0001F004-\U0001F5FF"  # uncategorized
-                                    u"\U000026FD"
-                                    u"\U000024C2-\U0001F251"  # flags
-                                    u"\U0001F926-\U0001F937"
-                                    u"\U0001F000-\U0001FFFF"
-                                    "]+", flags=re.UNICODE)
 
 
-async def do_reserve_copy_db():
-    current_time = pendulum.now("Europe/Moscow")
+# Create handlers
+console_handler = logging.StreamHandler()
+file_handler = RotatingFileHandler(files.system_log, mode='a',
+                                   maxBytes=2048000, backupCount=2,
+                                   encoding='utf-8', delay=True)
+
+
+logging.basicConfig(
+    format="%(asctime)s::[%(levelname)s]::%(name)s::(%(filename)s).%(funcName)s(%(lineno)d)::%(message)s",
+    datefmt='%d.%m.%Y %I:%M:%S %p', level=logging.INFO, handlers=(file_handler, console_handler)
+)
+
+
+async def do_reserve_copy_db(settings: Settings):
+    current_time = pendulum.now(settings.time_zone)
     try:
         with open(files.main_db, 'rb') as db:
             db_bytes = db.read()
             with open(f'{files.reserve_db_folder}reserve_copy_'
-                      f'({current_time.date()}---'
-                      f'{current_time.time().hour}-{current_time.time().minute}).db', 'wb') as rdb:
+                      f'({current_time.date()}__'
+                      f'{current_time.time().hour}_{current_time.time().minute}).db', 'wb') as rdb:
                 rdb.write(db_bytes)
     except Exception as e:
         logging.error(e)
@@ -47,14 +46,10 @@ async def do_reserve_copy_db():
 
 
 # запись в файл логирования
-async def log(text: str):
-    time = str(pendulum.now())
-    try:
-        with open(files.working_log, 'a', encoding='utf-8') as f:
-            f.write(time + '    | ' + text + '\n')
-    except:
-        with open(files.working_log, 'w', encoding='utf-8') as f:
-            f.write(time + '    | ' + text + '\n')
+async def log(settings: Settings, text: str):
+    time = str(pendulum.now(settings.time_zone))
+    with codecs.open(files.working_log, 'a', encoding='utf-8') as f:
+        f.write(time + '    | ' + text + '\n')
 
 
 def entity_read(entities: MessageEntity, entity_list: List, count_string_track: int) -> List:
@@ -76,11 +71,44 @@ def entity_read(entities: MessageEntity, entity_list: List, count_string_track: 
 
 
 def deEmojify(text: str) -> str:
+    regrex_pattern = re.compile(pattern="["
+                                        u"\U0001F601-\U0001F64F"  # emoticons
+                                        u"\U0001F30D-\U0001F567"  # symbols & pictographs
+                                        u"\U0001F681-\U0001F6C5"  # transport & map symbols
+                                        u"\U0001F004-\U0001F5FF"  # uncategorized
+                                        u"\U000026FD"  # gas station
+                                        u"\U000024C2-\U0001F251"  # flags
+                                        u"\U0001F926-\U0001F937"
+                                        u"\U0001F000-\U0001FFFF"
+                                        "]+", flags=re.UNICODE)
     return regrex_pattern.sub(r'', text)
 
 
 def emoji_count(text: str) -> int:
+    pattern = "["
+    with codecs.open(files.emoji_patterns, encoding='utf-8') as f:
+        for line in f.readlines():
+            pattern += line
+    pattern += "]+"
+    regrex_pattern = re.compile(pattern=pattern, flags=re.UNICODE)
     return len(regrex_pattern.findall(text))
+
+
+def find_emoji(text: str) -> List:
+    return re.findall(r'[^\w\s,]', text)
+
+
+def add_emoji_as_pattern(text: str) -> bool:
+    add_emoji_flag = True
+    text = text + "\n"
+    with codecs.open(files.emoji_patterns, mode='r', encoding='utf-8') as f:
+        for line in f.readlines():
+            if line == text:
+                add_emoji_flag = False
+    if add_emoji_flag:
+        with codecs.open(files.emoji_patterns, mode='a', encoding='utf-8') as f:
+            f.write(text)
+    return add_emoji_flag
 
 
 def del_id(table: Type[Union[Admin, Author]], id_for_del: int) -> None:
@@ -147,8 +175,8 @@ def new_author(settings: Settings, his_id: int, his_username: str, experience: i
             author, author_created = Author.get_or_create(profile_id=user,
                                                           permissions='author_permissions',
                                                           experience=experience)
-        except Exception as error:
-            logging.error(error)
+        except Exception as e:
+            logging.error(e)
             return 'Данный пользователь уже состоит в другой группе'
         else:
             if author_created:
@@ -164,8 +192,8 @@ def new_admin(his_id: int, his_username: str) -> str:
 
     try:
         admin, admin_created = Admin.get_or_create(profile=user, permissions='admin_permissions')
-    except Exception as error:
-        logging.error(error)
+    except Exception as e:
+        logging.error(e)
         return 'Данный пользователь уже состоит в другой группе'
     else:
         if admin_created:
@@ -179,8 +207,8 @@ def new_moder(his_id: int, his_username: str) -> str:
 
     try:
         moder, moder_created = Admin.get_or_create(profile=user, permissions='moder_permissions')
-    except Exception as error:
-        logging.error(error)
+    except Exception as e:
+        logging.error(e)
         return 'Данный пользователь уже состоит в другой группе'
     else:
         if moder_created:
@@ -197,8 +225,8 @@ def new_blocked_user(his_id: int, his_username: str, who_blocked_username: str) 
             profile_id=user,
             who_blocked=who_blocked_username
         )
-    except Exception as error:
-        logging.error(error)
+    except Exception as e:
+        logging.error(e)
     else:
         if blocked_user_created:
             return 'Пользователь успешно заблокирован'
@@ -215,7 +243,7 @@ def get_state(chat_id: int) -> Union[bool, object]:
     with shelve.open(files.state_bd) as bd:
         try:
             state_num = bd[str(chat_id)]
-        except:
+        except Exception as e:
             return False
         else:
             return state_num
@@ -224,14 +252,6 @@ def get_state(chat_id: int) -> Union[bool, object]:
 def delete_state(chat_id: int) -> None:
     with shelve.open(files.state_bd) as bd:
         del bd[str(chat_id)]
-
-
-def check_message(message: str) -> bool:
-    with shelve.open(files.bot_message_bd) as bd:
-        if message in bd:
-            return True
-        else:
-            return False
 
 
 def set_chat_value_message(message: Message, mode: int, pic_src: str = '') -> None:
@@ -322,19 +342,19 @@ def set_chat_value_message(message: Message, mode: int, pic_src: str = '') -> No
             bd[str(message.chat.id)] = temp_dict
 
 
-def get_chat_value_message(message: Message) -> Union[bool, object, Dict]:
+def get_chat_value_message(chat_id: int) -> Union[bool, object, Dict]:
     with shelve.open(files.bot_message_bd) as bd:
         try:
-            value = bd[str(message.chat.id)]
-        except:
+            value = bd[str(chat_id)]
+        except Exception as e:
             return False
         else:
             return value
 
 
-def delete_chat_value_message(message: Message) -> None:
+def delete_chat_value_message(chat_id: int) -> None:
     with shelve.open(files.bot_message_bd) as bd:
-        del bd[str(message.chat.id)]
+        del bd[str(chat_id)]
 
 
 # изменение настроек бота и запись в файл настроек
@@ -350,12 +370,21 @@ def change_settings(settings: Settings) -> None:
         yaml.dump(new_settings, f)
 
 
-async def get_csv(settings: Settings) -> bool:
+async def get_csv(bot: Bot, settings: Settings) -> bool:
     try:
-        csv = settings.session.get(settings.url_csv).text
-    except:
-        logging.info('Session was closed')
-        set_state(admin_id, 55)
+        csv = settings.session.get(
+            settings.url_csv,
+            timeout=(settings.time_for_connect, settings.time_for_data_rec)
+        ).text
+    except Exception as e:
+        logging.error(e)
+        settings.session.close()
+        logging.error('Session was closed')
+        await bot.send_message(SUPER_ADMIN_ID, 'Данные не могут быть обновлены!\n'
+                                               'Невозможно получить csv файл!\n'
+                                               'Вставьте ссылку с одноразовым ключом для доступа к csv файлу! '
+                                               'Получите её у Combot по команде /onetime.')
+        set_state(SUPER_ADMIN_ID, 55)
         return False
     else:
         with open('csv.csv', "w", encoding='utf-8') as file:
@@ -365,8 +394,13 @@ async def get_csv(settings: Settings) -> bool:
             for line in file.readlines():
                 if "<!DOCTYPE html>" in line:
                     settings.session.close()
-                    logging.info('Session was closed')
-
+                    logging.error('Session was closed')
+                    await bot.send_message(SUPER_ADMIN_ID, 'Данные не могут быть обновлены!\n'
+                                                           'Нет авторизации!\n'
+                                                           'Вставьте ссылку с одноразовым '
+                                                           'ключом для доступа к csv файлу! '
+                                                           'Получите её у Combot по команде /onetime.')
+                    set_state(SUPER_ADMIN_ID, 55)
                     return False
                 else:
                     line = line.split(',')
@@ -719,7 +753,7 @@ async def edit_post(bot: Bot, message: Message, edited_post: Dict, settings: Set
                 if edited_post['pic_post'][0] == '':
                     return True
                 else:
-                    photo = open(edited_post['pic_post'][0], 'rb')
+                    photo = InputMediaPhoto(open(edited_post['pic_post'][0], 'rb'))
                     await bot.edit_message_media(media=photo, chat_id=settings.channel_name,
                                                  message_id=edited_post['message_id'])
                     return True
@@ -727,7 +761,7 @@ async def edit_post(bot: Bot, message: Message, edited_post: Dict, settings: Set
                 if edited_post['pic_post'] == '':
                     return True
                 else:
-                    photo = open(edited_post['pic_post'], 'rb')
+                    photo = InputMediaPhoto(open(edited_post['pic_post'], 'rb'))
                     await bot.edit_message_media(media=photo, chat_id=settings.channel_name,
                                                  message_id=edited_post['message_id'])
                     return True
