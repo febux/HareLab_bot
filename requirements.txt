@@ -2,7 +2,7 @@ aiogram==2.13
 aioschedule==0.5.2
 PyYAML~=6.0
 pendulum~=2.1.2
-requests==2.25.1
+requests==2.31.0
 validators==0.18.2
 peewee==3.14.10
 python-dotenv~=0.20.0
